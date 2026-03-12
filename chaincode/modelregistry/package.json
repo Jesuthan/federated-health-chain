@@ -1,0 +1,16 @@
+{
+  "name": "modelregistry",
+  "version": "1.0.0",
+  "description": "Model Registry Chaincode for Federated Learning on Hyperledger Fabric",
+  "main": "index.js",
+  "scripts": {
+    "start": "fabric-chaincode-node start"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "dependencies": {
+    "fabric-contract-api": "^2.2.3",
+    "fabric-shim": "^2.2.3"
+  }
+}
