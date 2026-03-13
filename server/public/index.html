@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FedHealth Chain — Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+  header {
+    background: linear-gradient(135deg, #1e3a5f, #0d2137);
+    padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #1e40af;
+  }
+  header h1 { font-size: 1.5rem; color: #60a5fa; letter-spacing: 1px; }
+  header h1 span { color: #34d399; }
+  .live-badge { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #34d399; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
+
+  .status-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+  .status-card {
+    background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px;
+    padding: 16px 20px; display: flex; align-items: center; gap: 16px;
+  }
+  .status-icon { font-size: 2rem; }
+  .status-info label { font-size: 0.75rem; color: #718096; text-transform: uppercase; letter-spacing: 1px; }
+  .status-info p { font-size: 1rem; font-weight: 600; margin-top: 2px; }
+  .status-ok { color: #34d399; }
+  .status-err { color: #f87171; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card {
+    background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px;
+    padding: 20px; text-align: center;
+  }
+  .stat-card .value { font-size: 2.5rem; font-weight: 700; color: #60a5fa; }
+  .stat-card .label { font-size: 0.8rem; color: #718096; margin-top: 6px; text-transform: uppercase; letter-spacing: 1px; }
+
+  .section-title {
+    font-size: 1rem; font-weight: 600; color: #94a3b8;
+    margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: #2d3748; }
+
+  .table-wrap { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px; overflow: hidden; margin-bottom: 28px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #0d1520; padding: 12px 16px; text-align: left; font-size: 0.75rem; color: #718096; text-transform: uppercase; letter-spacing: 1px; }
+  td { padding: 14px 16px; font-size: 0.875rem; border-top: 1px solid #1e2d40; }
+  tr:hover td { background: #1e2d40; }
+
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+  .badge-covid { background: #1e3a8a; color: #93c5fd; }
+  .badge-skin { background: #3b1f6e; color: #c4b5fd; }
+  .badge-round { background: #14532d; color: #86efac; }
+
+  .cid {
+    font-family: monospace; font-size: 0.75rem; color: #60a5fa;
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+  }
+  .cid:hover { color: #93c5fd; }
+  .uid { font-family: monospace; font-size: 0.75rem; color: #94a3b8; }
+  .empty-state { text-align: center; padding: 48px; color: #4a5568; font-size: 0.9rem; }
+
+  .rounds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 28px; }
+  .round-card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px; padding: 16px; }
+  .round-card h3 { font-size: 0.85rem; color: #60a5fa; margin-bottom: 10px; }
+  .round-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.8rem; }
+  .round-row span { color: #94a3b8; }
+  .round-row strong { color: #e2e8f0; }
+
+  footer { text-align: center; padding: 24px; color: #4a5568; font-size: 0.75rem; border-top: 1px solid #1e2d40; }
+
+  .refresh-btn {
+    background: #1e40af; color: #bfdbfe; border: none; border-radius: 8px;
+    padding: 8px 18px; font-size: 0.8rem; cursor: pointer; margin-left: 12px;
+  }
+  .refresh-btn:hover { background: #2563eb; }
+  .last-updated { font-size: 0.75rem; color: #4a5568; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>FedHealth <span>Chain</span> &mdash; Dashboard</h1>
+    <div class="last-updated" id="lastUpdated">Loading...</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="live-badge"><div class="dot"></div> Live</div>
+    <button class="refresh-btn" onclick="loadData()">Refresh</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="status-bar">
+    <div class="status-card">
+      <div class="status-icon">&#9935;</div>
+      <div class="status-info">
+        <label>Fabric Blockchain</label>
+        <p id="fabricStatus" class="status-ok">Checking...</p>
+      </div>
+    </div>
+    <div class="status-card">
+      <div class="status-icon">&#128230;</div>
+      <div class="status-info">
+        <label>IPFS Node</label>
+        <p id="ipfsStatus" class="status-ok">Checking...</p>
+      </div>
+    </div>
+    <div class="status-card">
+      <div class="status-icon">&#128187;</div>
+      <div class="status-info">
+        <label>REST API</label>
+        <p id="apiStatus" class="status-ok">Checking...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="value" id="statTotal">-</div>
+      <div class="label">Total Updates</div>
+    </div>
+    <div class="stat-card">
+      <div class="value" id="statHospitals">-</div>
+      <div class="label">Hospitals</div>
+    </div>
+    <div class="stat-card">
+      <div class="value" id="statRounds">-</div>
+      <div class="label">FL Rounds</div>
+    </div>
+    <div class="stat-card">
+      <div class="value" id="statModels">-</div>
+      <div class="label">Model Types</div>
+    </div>
+  </div>
+
+  <div class="section-title">Rounds Summary</div>
+  <div class="rounds-grid" id="roundsGrid">
+    <div class="empty-state">Loading rounds...</div>
+  </div>
+
+  <div class="section-title">Blockchain Records</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Update ID</th>
+          <th>Sender</th>
+          <th>Model</th>
+          <th>Round</th>
+          <th>IPFS CID</th>
+          <th>DP Clip</th>
+          <th>DP Noise</th>
+          <th>Timestamp</th>
+        </tr>
+      </thead>
+      <tbody id="updatesTable">
+        <tr><td colspan="8" class="empty-state">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  FedHealth Chain &middot; Hyperledger Fabric 2.5 &middot; IPFS Kubo &middot; Differential Privacy FL
+</footer>
+
+<script>
+const API = 'http://localhost:3000';
+
+async function checkStatus() {
+  try {
+    const r = await fetch(API + '/health');
+    if (r.ok) {
+      document.getElementById('apiStatus').textContent = 'Online';
+      document.getElementById('apiStatus').className = 'status-ok';
+      document.getElementById('fabricStatus').textContent = 'Online';
+      document.getElementById('fabricStatus').className = 'status-ok';
+    }
+  } catch(e) {
+    document.getElementById('apiStatus').textContent = 'Offline';
+    document.getElementById('apiStatus').className = 'status-err';
+    document.getElementById('fabricStatus').textContent = 'Unknown';
+    document.getElementById('fabricStatus').className = 'status-err';
+  }
+
+  try {
+    const r = await fetch('http://localhost:5001/api/v0/version', { method: 'POST' });
+    if (r.ok) {
+      const d = await r.json();
+      document.getElementById('ipfsStatus').textContent = 'Online v' + d.Version;
+      document.getElementById('ipfsStatus').className = 'status-ok';
+    }
+  } catch(e) {
+    document.getElementById('ipfsStatus').textContent = 'Offline';
+    document.getElementById('ipfsStatus').className = 'status-err';
+  }
+}
+
+async function loadData() {
+  await checkStatus();
+  try {
+    const r = await fetch(API + '/api/updates');
+    const data = await r.json();
+    const updates = data.updates || [];
+
+    const hospitals = new Set(updates.map(u => u.sender));
+    const rounds = new Set(updates.map(u => u.round));
+    const models = new Set(updates.map(u => u.modelType));
+
+    document.getElementById('statTotal').textContent = updates.length;
+    document.getElementById('statHospitals').textContent = hospitals.size;
+    document.getElementById('statRounds').textContent = rounds.size;
+    document.getElementById('statModels').textContent = models.size;
+
+    const roundMap = {};
+    updates.forEach(u => {
+      if (!roundMap[u.round]) roundMap[u.round] = [];
+      roundMap[u.round].push(u);
+    });
+
+    const roundsGrid = document.getElementById('roundsGrid');
+    const roundEntries = Object.entries(roundMap).sort((a,b) => Number(a[0]) - Number(b[0]));
+    if (roundEntries.length === 0) {
+      roundsGrid.innerHTML = '<div class="empty-state">No rounds yet</div>';
+    } else {
+      roundsGrid.innerHTML = roundEntries.map(function(entry) {
+        const round = entry[0], items = entry[1];
+        return '<div class="round-card"><h3>Round ' + round + '</h3>' +
+          items.map(u => '<div class="round-row"><span>' + u.sender + '</span><strong>' + u.modelType + '</strong></div>').join('') +
+          '<div class="round-row" style="margin-top:8px;border-top:1px solid #2d3748;padding-top:8px;"><span>Submissions</span><strong>' + items.length + '</strong></div></div>';
+      }).join('');
+    }
+
+    const tbody = document.getElementById('updatesTable');
+    if (updates.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No blockchain records yet</td></tr>';
+    } else {
+      tbody.innerHTML = updates.map(function(u) {
+        return '<tr>' +
+          '<td class="uid">' + u.updateId + '</td>' +
+          '<td><strong>' + u.sender + '</strong></td>' +
+          '<td><span class="badge badge-' + u.modelType + '">' + u.modelType + '</span></td>' +
+          '<td><span class="badge badge-round">Round ' + u.round + '</span></td>' +
+          '<td><div class="cid" title="' + u.ipfsCID + '">' + u.ipfsCID + '</div></td>' +
+          '<td>' + u.clipValue + '</td>' +
+          '<td>' + u.noiseScale + '</td>' +
+          '<td>' + new Date(u.timestamp).toLocaleString() + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+  } catch(err) {
+    document.getElementById('updatesTable').innerHTML = '<tr><td colspan="8" class="empty-state">Error: ' + err.message + '</td></tr>';
+  }
+}
+
+loadData();
+setInterval(loadData, 10000);
+</script>
+</body>
+</html>

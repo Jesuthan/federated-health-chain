@@ -8,6 +8,7 @@ const path = require('path');
 
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 const CHANNEL_NAME = 'mychannel';
@@ -15,7 +16,7 @@ const CHAINCODE_NAME = 'modelregistry';
 
 const ccpPath = path.resolve(
     process.env.HOME,
-    'fabric-samples', 'test-network', 'organizations',
+    'fedlearn-fabric', 'fabric-samples', 'test-network', 'organizations',
     'peerOrganizations', 'org1.example.com',
     'connection-org1.json'
 );

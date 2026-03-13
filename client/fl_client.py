@@ -166,25 +166,26 @@ def upload_to_ipfs(delta: dict) -> str:
     Returns the IPFS CID string.
     Raises RuntimeError if the IPFS daemon is unreachable.
     """
-    import ipfshttpclient
-
     tmp = tempfile.NamedTemporaryFile(suffix='.pt', delete=False)
     try:
         torch.save(delta, tmp.name)
         tmp.close()
 
         try:
-            client = ipfshttpclient.connect('/ip4/127.0.0.1/tcp/5001')
-        except Exception:
+            with open(tmp.name, 'rb') as f:
+                response = requests.post(
+                    'http://127.0.0.1:5001/api/v0/add',
+                    files={'file': f},
+                    timeout=30
+                )
+            response.raise_for_status()
+            cid = response.json()['Hash']
+            print(f"  Uploaded to IPFS — CID: {cid}")
+            return cid
+        except requests.exceptions.ConnectionError:
             raise RuntimeError(
                 "Cannot connect to IPFS. Make sure IPFS daemon is running: ipfs daemon"
             )
-
-        result = client.add(tmp.name)
-        client.close()
-        cid = result['Hash']
-        print(f"  Uploaded to IPFS — CID: {cid}")
-        return cid
     finally:
         if os.path.exists(tmp.name):
             os.unlink(tmp.name)

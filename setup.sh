@@ -11,13 +11,13 @@ echo "  fedlearn-fabric — Environment Setup"
 echo "============================================================"
 echo ""
 
-# ── 1. Node.js 18 ─────────────────────────────────────────────
+# ── 1. Node.js 20 ─────────────────────────────────────────────
 echo "[1/6] Checking Node.js..."
 if node --version 2>/dev/null | grep -q "v1[89]\|v2[0-9]"; then
     echo "  Node.js $(node --version) already installed."
 else
-    echo "  Installing Node.js 18..."
-    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    echo "  Installing Node.js 20..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt-get install -y nodejs
 fi
 echo "  Node: $(node --version) | npm: $(npm --version)"
@@ -29,10 +29,13 @@ if command -v ipfs &>/dev/null; then
     echo "  IPFS $(ipfs version) already installed."
 else
     echo "  Installing IPFS Kubo v0.29.0..."
+    # Extract in /tmp to avoid NTFS permission issues on /mnt drives
+    cd /tmp
     wget -q https://dist.ipfs.tech/kubo/v0.29.0/kubo_v0.29.0_linux-amd64.tar.gz
-    tar -xzf kubo_v0.29.0_linux-amd64.tar.gz
+    tar --warning=no-timestamp -xzf kubo_v0.29.0_linux-amd64.tar.gz
     sudo bash kubo/install.sh
     rm -rf kubo kubo_v0.29.0_linux-amd64.tar.gz
+    cd - > /dev/null
     echo "  IPFS installed."
 fi
 
