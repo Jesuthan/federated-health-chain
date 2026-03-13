@@ -7,3 +7,6 @@ __pycache__/
 *.pyc
 .env
 *.log
+fabric-samples/
+kubo/
+*.tar.gz
