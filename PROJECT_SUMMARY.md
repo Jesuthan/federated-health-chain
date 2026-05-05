@@ -1,12 +1,15 @@
 # Federated Learning Project — Summary
 
-## What Was Built
+## What Is Built
 
-A **Federated Learning (FL) system** that combines:
-- **Hyperledger Fabric** — blockchain to permanently record model updates
-- **IPFS** — decentralised file storage for model weight deltas
-- **Express REST API** — bridge between Python clients and Fabric
-- **Python FL Client** — trains locally, applies differential privacy, submits update
+A full **Federated Learning (FL) system** combining:
+
+- **Hyperledger Fabric** — blockchain records every model update and global model CID
+- **IPFS** — decentralised storage for weight deltas and global models
+- **Express REST API** — bridge between Python clients/aggregator and Fabric
+- **Python FL Client** — loads real model, trains locally, applies DP, submits update
+- **FedAvg Aggregator** — fetches deltas from IPFS, averages them, pushes new global model
+- **Live Dashboard** — browser UI showing round status, hospital updates, global model CIDs
 
 ---
 
@@ -14,204 +17,131 @@ A **Federated Learning (FL) system** that combines:
 
 ```
 fedlearn-fabric/
-├── chaincode/
-│   └── modelregistry/
-│       ├── index.js          ← Fabric smart contract (JavaScript)
-│       └── package.json
+├── chaincode/modelregistry/
+│   └── index.js               <- Fabric smart contract
 ├── server/
-│   ├── enrollAdmin.js        ← Enroll Fabric CA admin identity
-│   ├── registerUser.js       ← Register appUser identity
-│   ├── server.js             ← Express REST API (port 3000)
+│   ├── server.js              <- Express REST API (auto-triggers FedAvg)
+│   ├── aggregator.py          <- FedAvg coordinator
+│   ├── enrollAdmin.js
+│   ├── registerUser.js
 │   └── package.json
 ├── client/
-│   ├── fl_client.py          ← Python FL client
+│   ├── fl_client.py           <- Hospital FL client (CovidCNN + SkinCNN)
 │   └── requirements.txt
 ├── models/
-│   ├── generate_dummy_models.py  ← Creates test .pth weight files
-│   ├── covid_model.pth           ← (add real weights here)
-│   └── skin_model.pth            ← (add real weights here)
-├── .gitignore
-├── README.md
-└── PROJECT_SUMMARY.md
+│   ├── inspect_hf_models.py   <- Downloads real weights from HuggingFace
+│   ├── covid_model.pth        <- Real COVID-19 weights (downloaded from HF)
+│   └── skin_model.pth         <- Real Skin Cancer weights (downloaded from HF)
+├── public/
+│   └── index.html             <- Live dashboard at http://localhost:3000
+└── README.md
 ```
 
 ---
 
-## File-by-File Breakdown
+## Component Status
 
-### `chaincode/modelregistry/index.js`
-Fabric smart contract. Stores and queries model update records on-chain.
-
-Functions:
-| Function | What it does |
-|---|---|
-| `storeUpdate()` | Save a model update record (sender, CID, round, DP params) |
-| `getUpdate()` | Fetch one record by ID |
-| `getAllUpdates()` | Return every stored record |
-| `queryByRound()` | Filter records by FL round number |
-| `queryBySender()` | Filter records by client name |
-
-Each on-chain record looks like:
-```json
-{
-  "sender": "Client1",
-  "modelType": "covid",
-  "round": 1,
-  "ipfsCID": "QmABC...",
-  "timestamp": "2024-...",
-  "clipValue": 1.0,
-  "noiseScale": 0.1
-}
-```
-> Note: actual model weights live on IPFS, not on chain. Only the address (CID) is stored.
+| Component | Status | Notes |
+|---|---|---|
+| Fabric chaincode | Done | storeUpdate, storeGlobalModel, queryByRoundAndModel, getLatestGlobalModel |
+| REST server | Done | 8 endpoints, auto-triggers FedAvg at MIN_CLIENTS threshold |
+| FedAvg aggregator | Done | server/aggregator.py — architecture-agnostic tensor averaging |
+| FL client | Done | CovidCNN + SkinCNN, --pull-global flag, DP (clip + noise) |
+| Real COVID weights | Done | Downloaded from HuggingFace, strict load verified (0 mismatches) |
+| Real Skin weights | Pending | HF repo gated — needs owner to remove gated access |
+| Dashboard | Done | public/index.html — auto-refreshes every 5s |
+| Real training loop | Intentional placeholder | simulate_local_training() — hospitals replace with their own dataset |
 
 ---
 
-### `server/enrollAdmin.js`
-Connects to Fabric CA and enrolls the `admin` identity into `server/wallet/`.
-Run once before anything else.
+## Model Architectures
 
-### `server/registerUser.js`
-Uses admin identity to register `appUser` into `server/wallet/`.
-The REST server signs all transactions as `appUser`.
+### CovidCNN — matched exactly from HuggingFace state_dict
 
-### `server/server.js`
-Express REST API. Translates HTTP calls into Fabric transactions.
+```
+Input: 1 x 224 x 224 (grayscale)
+layers.0  Conv2d(1, 32, 3)   + ReLU + MaxPool2d(2)   -> 112x112
+layers.3  Conv2d(32, 64, 3)  + ReLU + MaxPool2d(2)   -> 56x56
+layers.6  Conv2d(64, 128, 3) + ReLU + MaxPool2d(2)   -> 28x28
+layers.9  Conv2d(128,256, 3) + ReLU + MaxPool2d(2)   -> 14x14
+fc1       Linear(50176, 128)   [256 * 14 * 14 = 50176]
+fc2       Linear(128, 3)
+Output: raw logits, 3 classes
+```
 
-| Method | Endpoint | Description |
+### SkinCNN — 2-layer Keras CNN converted to PyTorch
+
+```
+Input: 1 x 224 x 224 (grayscale)
+conv1     Conv2d(1, 32, 3) + ReLU + MaxPool2d(2)     -> 112x112
+conv2     Conv2d(32, 64, 3) + ReLU + MaxPool2d(2)    -> 56x56
+fc1       Linear(200704, 128)   [64 * 56 * 56 = 200704]
+fc2       Linear(128, 7)
+Output: Softmax probabilities, 7 classes
+NOTE: key names (conv1/conv2/fc1/fc2) to be confirmed once HF repo is ungated
+```
+
+---
+
+## Full Round Flow
+
+```
+Round N start:
+  Hospital1  ->  pull global model CID from blockchain
+                 download model from IPFS
+                 train locally on patient data
+                 compute delta (updated - original)
+                 apply DP (clip + Gaussian noise)
+                 upload delta to IPFS  ->  CID_1
+                 POST CID_1 to /api/updates
+
+  Hospital2  ->  (same steps)  ->  CID_2
+                 POST CID_2 to /api/updates
+
+server.js sees updateCount >= MIN_CLIENTS (2):
+  ->  spawns aggregator.py --round N --model covid
+
+aggregator.py:
+  ->  fetch CID_1, CID_2 from blockchain
+  ->  download delta_1, delta_2 from IPFS
+  ->  FedAvg: avg_delta = mean(delta_1, delta_2)
+  ->  load base model (previous global or HF pretrained)
+  ->  global_weights = base + avg_delta
+  ->  upload global_weights to IPFS  ->  GLOBAL_CID
+  ->  POST GLOBAL_CID to /api/global-model  ->  blockchain record
+
+Round N+1:
+  Hospital1  ->  GET /api/global-model/covid/latest  ->  GLOBAL_CID
+                 download global model from IPFS
+                 train locally  ->  ...
+```
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Liveness check |
-| GET | `/api/updates` | All model updates |
-| POST | `/api/updates` | Submit new update |
+| GET | `/api/updates` | All hospital updates |
+| POST | `/api/updates` | Submit update (auto-triggers FedAvg at threshold) |
 | GET | `/api/updates/round/:round` | Filter by FL round |
-| GET | `/api/updates/sender/:sender` | Filter by client |
+| GET | `/api/updates/sender/:sender` | Filter by hospital |
+| POST | `/api/global-model` | Record global model (called by aggregator) |
+| GET | `/api/global-model/:modelType/latest` | Latest global model CID |
+| GET | `/api/global-model/:modelType/round/:round` | Global model for specific round |
 
 ---
 
-### `client/fl_client.py`
-Python client each participant runs. Pipeline:
+## One Remaining Step
 
-```
-[1] Load model weights (.pth file)
-[2] Simulate local training
-[3] Compute weight delta (updated - original)
-[4] Clip gradients        ← differential privacy
-[5] Add Gaussian noise    ← differential privacy
-[6] Upload delta to IPFS  → get CID
-[7] POST CID to REST server → stored on Fabric blockchain
-```
-
-Run example:
-```bash
-python fl_client.py --sender Client1 --model covid --round 1 --clip 1 --noise 0.1
-```
-
-Models supported: `covid`, `skin`
-
----
-
-### `models/generate_dummy_models.py`
-Creates random PyTorch weights for `covid_model.pth` and `skin_model.pth`.
-Use this for testing when you don't have real model weights.
+The Skin Cancer HuggingFace repo (`sanjulamaduranga/BFL_Healthcare_skincancer`) has
+gated access enabled. Once the repo owner removes gating, run:
 
 ```bash
-python generate_dummy_models.py
+python models/inspect_hf_models.py
 ```
 
----
-
-## How the System Works End-to-End
-
-```
-Hospital / Client
-│
-├─ trains on local patient data (never leaves the hospital)
-├─ computes weight delta
-├─ applies differential privacy (clip + noise)
-├─ uploads delta ──────────────────────► IPFS
-│                                         └─ returns CID: "QmXyz..."
-└─ POST /api/updates ─────────────────► server.js
-                                          └─ Fabric chaincode
-                                               └─ on-chain record saved
-```
-
----
-
-## What Is NOT Built (intentionally left out)
-
-| Missing piece | Why |
-|---|---|
-| Model aggregation (FedAvg) | Would need a coordinator server to fetch all CIDs from IPFS, average the deltas, push new global model back |
-| Real training loop | `simulate_local_training()` uses noise only — replace with real PyTorch training on your dataset |
-| Real model weights | `covid_model.pth` / `skin_model.pth` need real pretrained weights |
-| Authentication on REST API | No auth on the Express server currently |
-
----
-
-## Running the Project (Codespace or Docker)
-
-### What Codespace gives you free
-- Docker, Node.js, Python, Git, Linux terminal
-
-### What you must install
-```bash
-# IPFS
-wget https://dist.ipfs.tech/kubo/v0.29.0/kubo_v0.29.0_linux-amd64.tar.gz
-tar -xvzf kubo_v0.29.0_linux-amd64.tar.gz && cd kubo && sudo bash install.sh
-ipfs init
-
-# Fabric binaries + fabric-samples
-cd ~/fedlearn-fabric
-curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.5.0 1.5.5
-echo 'export PATH=$HOME/bin:$PATH' >> ~/.bashrc && source ~/.bashrc
-```
-
-### Startup order (4 terminals)
-
-```bash
-# Terminal 1
-ipfs daemon
-
-# Terminal 2
-cd ~/fabric-samples/test-network
-./network.sh up createChannel -ca
-./network.sh deployCC -ccn modelregistry -ccp ~/fedlearn-fabric/chaincode/modelregistry -ccl javascript
-
-# Terminal 3
-cd ~/fedlearn-fabric/server
-npm install
-node enrollAdmin.js && node registerUser.js
-node server.js
-
-# Terminal 4
-cd ~/fedlearn-fabric/client
-pip install torch requests ipfshttpclient
-python ../models/generate_dummy_models.py
-python fl_client.py --sender Client1 --model covid --round 1
-```
-
-### Verify it works
-```bash
-curl http://localhost:3000/api/updates
-```
-
----
-
-## Current Status
-
-| Component | Status |
-|---|---|
-| Chaincode | Done |
-| REST Server | Done |
-| FL Client | Done |
-| Dummy model generator | Done |
-| Real model weights | Not added yet |
-| Model aggregation (FedAvg) | Not built yet |
-| Connection to any external system | None — standalone |
-
----
-
-## Next Steps (planned)
-
-- User will provide a clean plan
-- Code will be updated based on new requirements
+This downloads `skin_model.pth` and prints the real layer key names.
+If the keys differ from `conv1/conv2/fc1/fc2`, update `SkinCNN` in `client/fl_client.py`
+to match — same way `CovidCNN` was matched from the real state_dict.

@@ -1,16 +1,55 @@
 # fedlearn-fabric
 
-Federated Learning system using **Hyperledger Fabric** (blockchain) and **IPFS** for privacy-preserving, decentralised model training.
+Federated Learning system using **Hyperledger Fabric** (blockchain) and **IPFS** for privacy-preserving, decentralised model training across hospitals.
+
+Two models supported: **COVID-19** (chest X-ray, 3 classes) and **Skin Cancer** (lesion images, 7 classes).
+
+---
 
 ## System Overview
 
 ```
-Hospital/Client
-  ├─ trains CNN on local data        (data never leaves)
+Hospital / Client
+  ├─ pulls latest global model from IPFS  (--pull-global)
+  ├─ trains CNN on local data             (data never leaves)
   ├─ computes weight delta
-  ├─ clips + adds noise              (differential privacy)
-  ├─ uploads delta ──────────────►  IPFS  →  returns CID
-  └─ POST CID ───────────────────►  REST API  →  Fabric  →  on-chain record
+  ├─ clips + adds noise                   (differential privacy)
+  ├─ uploads delta ──────────────────►   IPFS  ->  returns CID
+  └─ POST CID ───────────────────────►   REST API  ->  Fabric  ->  on-chain record
+
+Coordinator (auto-triggered when MIN_CLIENTS threshold reached)
+  ├─ fetches all delta CIDs from blockchain
+  ├─ downloads deltas from IPFS
+  ├─ FedAvg: equal-weight average across all clients
+  ├─ applies averaged delta to base model
+  ├─ uploads new global model ─────────► IPFS  ->  returns CID
+  └─ records global model CID ─────────► Fabric blockchain
+```
+
+---
+
+## Project Structure
+
+```
+fedlearn-fabric/
+├── chaincode/modelregistry/
+│   └── index.js          <- Fabric smart contract
+├── server/
+│   ├── server.js         <- Express REST API + auto-aggregation trigger
+│   ├── aggregator.py     <- FedAvg coordinator (spawned automatically)
+│   ├── enrollAdmin.js
+│   ├── registerUser.js
+│   └── package.json
+├── client/
+│   ├── fl_client.py      <- Hospital FL client
+│   └── requirements.txt
+├── models/
+│   ├── inspect_hf_models.py   <- Downloads real weights from HuggingFace
+│   ├── covid_model.pth        <- Real pretrained COVID-19 weights (from HF)
+│   └── skin_model.pth         <- Real pretrained Skin Cancer weights (from HF)
+├── public/
+│   └── index.html        <- Live dashboard (served at http://localhost:3000)
+└── README.md
 ```
 
 ---
@@ -21,9 +60,8 @@ Hospital/Client
 |---|---|---|
 | Docker | Latest | Fabric peer/orderer containers |
 | Node.js | 18+ | Server + chaincode |
-| Python | 3.9+ | FL client |
+| Python | 3.9+ | FL client + aggregator |
 | Go | 1.21+ | Fabric CLI tools |
-| Git | Any | Cloning repos |
 
 ---
 
@@ -45,7 +83,6 @@ cd ~
 curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.5.0 1.5.5
 echo 'export PATH=$HOME/fabric-samples/bin:$PATH' >> ~/.bashrc
 source ~/.bashrc
-peer version
 ```
 
 ---
@@ -53,23 +90,25 @@ peer version
 ## Step 3 — Install dependencies
 
 ```bash
+# Python (client + aggregator)
+cd client && pip install -r requirements.txt
+
 # Chaincode
-cd chaincode/modelregistry && npm install
+cd ../chaincode/modelregistry && npm install
 
 # Server
 cd ../../server && npm install
-
-# Python client
-cd ../client && pip install -r requirements.txt
 ```
 
 ---
 
-## Step 4 — Generate test weights
+## Step 4 — Download real model weights
 
 ```bash
-cd models && python generate_dummy_models.py
+python models/inspect_hf_models.py
 ```
+
+Downloads `covid_model.pth` and `skin_model.pth` from HuggingFace and prints architecture details.
 
 ---
 
@@ -95,26 +134,38 @@ cd ~/fabric-samples/test-network
 cd ~/fedlearn-fabric/server
 node enrollAdmin.js
 node registerUser.js
-node server.js
+MIN_CLIENTS=2 node server.js
 ```
 
-**Terminal 4 — FL clients**
+**Terminal 4 — Hospital clients**
 ```bash
 cd ~/fedlearn-fabric/client
-python fl_client.py --sender Client1 --model covid --round 1 --clip 1 --noise 0.1
-python fl_client.py --sender Client2 --model covid --round 1
-python fl_client.py --sender Client3 --model skin  --round 1
+
+# Round 1 (no global model yet)
+python fl_client.py --sender Hospital1 --model covid --round 1
+python fl_client.py --sender Hospital2 --model covid --round 1
+# FedAvg triggers automatically once MIN_CLIENTS=2 updates arrive
+
+# Round 2+ (pull the new global model first)
+python fl_client.py --sender Hospital1 --model covid --round 2 --pull-global
+python fl_client.py --sender Hospital2 --model covid --round 2 --pull-global
 ```
+
+**Dashboard** — open `http://localhost:3000` in a browser to see live status.
 
 ---
 
-## Verify it works
+## FL Client Arguments
 
-```bash
-curl http://localhost:3000/api/updates
-curl http://localhost:3000/api/updates/round/1
-curl http://localhost:3000/api/updates/sender/Client1
-```
+| Argument | Default | Description |
+|---|---|---|
+| `--sender` | required | Hospital identifier e.g. Hospital1 |
+| `--model` | required | `covid` or `skin` |
+| `--round` | required | FL round number |
+| `--clip` | `1.0` | DP gradient clip value |
+| `--noise` | `0.1` | DP Gaussian noise scale |
+| `--server` | `http://localhost:3000` | REST server URL |
+| `--pull-global` | off | Pull latest global model before training (use from round 2+) |
 
 ---
 
@@ -123,97 +174,60 @@ curl http://localhost:3000/api/updates/sender/Client1
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Liveness check |
-| GET | `/api/updates` | All model updates |
-| POST | `/api/updates` | Submit new update |
+| GET | `/api/updates` | All hospital updates |
+| POST | `/api/updates` | Submit new update (triggers FedAvg when threshold reached) |
 | GET | `/api/updates/round/:round` | Filter by FL round |
-| GET | `/api/updates/sender/:sender` | Filter by client |
-
-**POST body example:**
-```json
-{
-  "sender": "Client1",
-  "modelType": "covid",
-  "round": 1,
-  "ipfsCID": "QmABC...",
-  "clipValue": 1.0,
-  "noiseScale": 0.1
-}
-```
-
-**On-chain record example:**
-```json
-{
-  "docType": "modelUpdate",
-  "updateId": "update_Client1_round1_a1b2c3d4",
-  "sender": "Client1",
-  "modelType": "covid",
-  "round": 1,
-  "ipfsCID": "QmABC...",
-  "timestamp": "2024-01-01T00:00:00.000Z",
-  "clipValue": 1.0,
-  "noiseScale": 0.1
-}
-```
+| GET | `/api/updates/sender/:sender` | Filter by hospital |
+| POST | `/api/global-model` | Record aggregated global model (called by aggregator) |
+| GET | `/api/global-model/:modelType/latest` | Get latest global model CID |
+| GET | `/api/global-model/:modelType/round/:round` | Get global model for a specific round |
 
 ---
 
-## CNN Architecture Comparison
+## Model Architectures
 
-| Arch | Layers | FC size | Speed | Accuracy |
-|---|---|---|---|---|
-| CNN2 | 2 conv | 64×16×16 → 128 | Fastest | Lowest |
-| CNN4 | 4 conv | 128×16×16 → 256 | Balanced | Medium ← default |
-| CNN6 | 6 conv | 256×16×16 → 512 | Slowest | Highest |
+### COVID-19 (CovidCNN)
+- Input: 224x224 grayscale (1 channel)
+- 4 blocks of Conv2d -> ReLU -> MaxPool2d(2): 224->112->56->28->14
+- Flatten: 256 * 14 * 14 = 50,176
+- FC: Linear(50176, 128) -> Linear(128, 3)
+- Output: raw logits for 3 classes
+- State dict keys: `layers.0/3/6/9`, `fc1`, `fc2`
 
-All architectures: **1-channel 64×64 input, 3 output classes**.
+### Skin Cancer (SkinCNN)
+- Input: 224x224 grayscale (1 channel)
+- 2-layer CNN converted from Keras Sequential
+- Conv2d(1,32) -> MaxPool(2) -> Conv2d(32,64) -> MaxPool(2): 224->112->56
+- Flatten: 64 * 56 * 56 = 200,704
+- FC: Linear(200704, 128) -> Linear(128, 7)
+- Output: Softmax probabilities for 7 classes
+- State dict keys: `conv1`, `conv2`, `fc1`, `fc2`
 
 ---
 
-## FL Client Arguments
+## FedAvg Aggregation
 
-| Argument | Default | Description |
-|---|---|---|
-| `--sender` | required | Client identifier (e.g. Client1) |
-| `--model` | required | `covid` or `skin` |
-| `--arch` | `cnn4` | CNN architecture: `cnn2`, `cnn4`, `cnn6` |
-| `--round` | required | FL round number |
-| `--clip` | `1.0` | DP gradient clip value |
-| `--noise` | `0.1` | DP Gaussian noise scale |
-| `--server` | `http://localhost:3000` | REST server URL |
+Triggered automatically by `server.js` when `MIN_CLIENTS` hospital updates arrive for the same round + model type.
+
+```bash
+# Manual trigger (if needed)
+python server/aggregator.py --round 1 --model covid
+python server/aggregator.py --round 1 --model skin
+```
+
+Set threshold via environment variable:
+```bash
+MIN_CLIENTS=3 node server.js
+```
 
 ---
 
 ## Shutdown
 
 ```bash
-# Stop Fabric network
+# Stop Fabric
 cd ~/fabric-samples/test-network && ./network.sh down
 
 # Stop IPFS daemon
 Ctrl+C in Terminal 1
 ```
-
-## Restarting Codespace
-
-```bash
-# Terminal 1
-ipfs daemon
-
-# Terminal 2
-cd ~/fabric-samples/test-network
-./network.sh up createChannel -ca
-
-# Terminal 3
-cd ~/fedlearn-fabric/server && node server.js
-```
-
----
-
-## What is NOT built yet
-
-| Feature | Notes |
-|---|---|
-| **FedAvg aggregation** | A coordinator would fetch all CIDs from IPFS, average deltas, push new global model |
-| **Real training loop** | Replace `simulate_local_training()` with real PyTorch training on your dataset |
-| **Real model weights** | Replace dummy `.pth` files with pretrained weights |
-| **API authentication** | REST server has no auth — add JWT or API keys for production |

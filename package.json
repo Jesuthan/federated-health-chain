@@ -1,0 +1,12 @@
+{
+  "name": "bfl-healthcare-launcher",
+  "version": "1.0.0",
+  "description": "BFL Healthcare Federated Learning Launcher",
+  "main": "launcher.js",
+  "scripts": {
+    "start": "node launcher.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

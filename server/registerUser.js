@@ -7,9 +7,12 @@ const path = require('path');
 
 async function main() {
     try {
-        const ccpPath = path.resolve(
-            process.env.HOME,
-            'fedlearn-fabric', 'fabric-samples', 'test-network', 'organizations',
+        const HOME = process.env.HOME || process.env.USERPROFILE;
+        const ccpBase = fs.existsSync('C:\\fabric-samples\\test-network')
+            ? 'C:\\fabric-samples'
+            : path.join(HOME, 'fabric-samples');
+        const ccpPath = path.join(
+            ccpBase, 'test-network', 'organizations',
             'peerOrganizations', 'org1.example.com',
             'connection-org1.json'
         );

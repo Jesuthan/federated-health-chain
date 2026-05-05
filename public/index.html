@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BFL Healthcare — Federated Learning</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #070d1a; font-family: 'Inter', system-ui, sans-serif; }
+
+    /* Glass cards */
+    .glass {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(100, 116, 139, 0.2);
+      backdrop-filter: blur(12px);
+    }
+    .glass-dark {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(100, 116, 139, 0.15);
+    }
+
+    /* Gradients */
+    .grad-blue   { background: linear-gradient(135deg, #1d4ed8, #7c3aed); }
+    .grad-green  { background: linear-gradient(135deg, #065f46, #0f766e); }
+    .grad-header { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%); }
+
+    /* Glow effects */
+    .glow-blue  { box-shadow: 0 0 20px rgba(59,130,246,0.15); }
+    .glow-green { box-shadow: 0 0 20px rgba(16,185,129,0.15); }
+
+    /* Badges */
+    .pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:9999px; font-size:0.7rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; }
+    .badge-waiting     { background:rgba(30,64,175,0.3);  color:#93c5fd; border:1px solid rgba(59,130,246,0.3); }
+    .badge-aggregating { background:rgba(120,53,15,0.3);  color:#fcd34d; border:1px solid rgba(251,191,36,0.3); }
+    .badge-done        { background:rgba(6,78,59,0.3);    color:#6ee7b7; border:1px solid rgba(52,211,153,0.3); }
+    .badge-none        { background:rgba(51,65,85,0.3);   color:#94a3b8; border:1px solid rgba(100,116,139,0.2); }
+
+    /* Monospace CID */
+    .cid { font-family: 'Courier New', monospace; font-size:0.7rem; color:#64748b; word-break:break-all; }
+
+    /* Separator */
+    .sep { border-color: rgba(100,116,139,0.15); }
+
+    /* Table rows */
+    .tr-even { background: rgba(30,41,59,0.4); }
+    .tr-odd  { background: rgba(15,23,42,0.4); }
+    tr:hover { background: rgba(51,65,85,0.3) !important; }
+
+    /* Animations */
+    @keyframes spin    { to { transform: rotate(360deg); } }
+    @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.4} }
+    @keyframes fadeIn  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+    @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+    .spinning  { animation: spin 1s linear infinite; }
+    .pulsing   { animation: pulse 2s ease-in-out infinite; }
+    .fade-in   { animation: fadeIn 0.3s ease-out; }
+
+    .skeleton {
+      background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 4px;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+    /* Dot indicator */
+    .dot-online  { background:#22c55e; box-shadow: 0 0 6px #22c55e; }
+    .dot-offline { background:#ef4444; box-shadow: 0 0 6px #ef4444; }
+    .dot-unknown { background:#94a3b8; }
+
+    /* Log terminal */
+    .terminal {
+      background: #020812;
+      border: 1px solid rgba(100,116,139,0.2);
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.72rem;
+      line-height: 1.6;
+      color: #94a3b8;
+      padding: 12px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .log-success { color: #4ade80; }
+    .log-error   { color: #f87171; }
+    .log-info    { color: #60a5fa; }
+    .log-dim     { color: #475569; }
+
+    /* Btn */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 8px; font-size: 0.85rem;
+      font-weight: 600; cursor: pointer; transition: all 0.15s;
+      border: none; outline: none;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary  { background: linear-gradient(135deg,#3b82f6,#6366f1); color:#fff; }
+    .btn-primary:hover  { filter: brightness(1.1); }
+    .btn-success  { background: linear-gradient(135deg,#059669,#0d9488); color:#fff; }
+    .btn-success:hover  { filter: brightness(1.1); }
+    .btn-outline  { background: transparent; color:#94a3b8; border:1px solid rgba(100,116,139,0.3); }
+    .btn-outline:hover  { border-color:#6366f1; color:#c7d2fe; }
+    .btn-danger   { background: rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); }
+    .btn-danger:hover   { background: rgba(239,68,68,0.25); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+
+    /* Form inputs */
+    input, select {
+      background: rgba(15,23,42,0.8);
+      border: 1px solid rgba(100,116,139,0.25);
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    input:focus, select:focus { border-color: #6366f1; }
+    input::placeholder { color: #475569; }
+    select option { background: #1e293b; }
+    label { color: #94a3b8; font-size: 0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:4px; }
+
+    /* Progress bar */
+    .progress-track { background: rgba(51,65,85,0.5); border-radius: 9999px; overflow: hidden; height: 6px; }
+    .progress-fill  { height: 100%; border-radius: 9999px; transition: width 0.5s ease; }
+  </style>
+</head>
+<body class="text-slate-300 min-h-screen">
+
+  <!-- ── HEADER ─────────────────────────────────────────────────────────────── -->
+  <header class="grad-header border-b border-slate-800/60 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl grad-blue flex items-center justify-center text-white font-bold text-sm">BFL</div>
+        <div>
+          <h1 class="text-white font-bold text-lg leading-none">BFL Healthcare</h1>
+          <p class="text-slate-500 text-xs mt-0.5">Federated Learning · Blockchain · IPFS</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2">
+          <span id="status-dot" class="w-2 h-2 rounded-full dot-unknown"></span>
+          <span id="status-text" class="text-slate-400 text-sm">Connecting…</span>
+        </div>
+        <span class="text-slate-600 text-xs" id="last-refresh"></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+    <!-- ── SERVICES CONTROL ──────────────────────────────────────────────────── -->
+    <div class="glass rounded-2xl p-6">
+      <h2 class="text-white font-semibold text-lg mb-5">Services</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+
+        <!-- IPFS -->
+        <div class="glass-dark rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span id="dot-ipfs" class="w-2 h-2 rounded-full dot-unknown"></span>
+              <span class="text-white font-medium text-sm">IPFS Daemon</span>
+            </div>
+            <span id="label-ipfs" class="text-slate-600 text-xs">Stopped</span>
+          </div>
+          <p class="text-slate-600 text-xs mb-3">Decentralised storage for model weight deltas</p>
+          <div class="flex gap-2">
+            <button class="btn btn-primary flex-1 text-xs py-1.5" id="btn-start-ipfs"   onclick="svcStart('ipfs')">Start</button>
+            <button class="btn btn-danger  flex-1 text-xs py-1.5" id="btn-stop-ipfs"    onclick="svcStop('ipfs')" disabled>Stop</button>
+          </div>
+        </div>
+
+        <!-- Fabric -->
+        <div class="glass-dark rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span id="dot-fabric" class="w-2 h-2 rounded-full dot-unknown"></span>
+              <span class="text-white font-medium text-sm">Fabric Network</span>
+            </div>
+            <span id="label-fabric" class="text-slate-600 text-xs">Stopped</span>
+          </div>
+          <p class="text-slate-600 text-xs mb-3">Blockchain ledger for immutable update records</p>
+          <div class="flex gap-2">
+            <button class="btn btn-primary flex-1 text-xs py-1.5" id="btn-start-fabric" onclick="svcStart('fabric')">Start</button>
+            <button class="btn btn-danger  flex-1 text-xs py-1.5" id="btn-stop-fabric"  onclick="svcStop('fabric')" disabled>Stop</button>
+          </div>
+        </div>
+
+        <!-- FL Server -->
+        <div class="glass-dark rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span id="dot-server" class="w-2 h-2 rounded-full dot-unknown"></span>
+              <span class="text-white font-medium text-sm">FL REST Server</span>
+            </div>
+            <span id="label-server" class="text-slate-600 text-xs">Stopped</span>
+          </div>
+          <p class="text-slate-600 text-xs mb-3">API bridge between hospitals and blockchain</p>
+          <div class="flex gap-2">
+            <button class="btn btn-primary flex-1 text-xs py-1.5" id="btn-start-server" onclick="svcStart('server')">Start</button>
+            <button class="btn btn-danger  flex-1 text-xs py-1.5" id="btn-stop-server"  onclick="svcStop('server')" disabled>Stop</button>
+          </div>
+          <div class="mt-2">
+            <button class="btn btn-outline w-full text-xs py-1.5" onclick="setupWallet()" title="Run enrollAdmin + registerUser after Fabric is running">Setup Wallet (enroll users)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log tabs -->
+      <div>
+        <div class="flex gap-1 mb-2">
+          <button class="btn btn-outline text-xs py-1 px-3" id="tab-ipfs"   onclick="showLog('ipfs')"  >IPFS</button>
+          <button class="btn btn-outline text-xs py-1 px-3" id="tab-fabric" onclick="showLog('fabric')">Fabric</button>
+          <button class="btn btn-outline text-xs py-1 px-3" id="tab-server" onclick="showLog('server')">FL Server</button>
+        </div>
+        <div class="terminal" id="svc-log">Select a service tab to see logs.</div>
+      </div>
+    </div>
+
+    <!-- ── STATS BAR ─────────────────────────────────────────────────────────── -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="glass rounded-2xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Total Updates</p>
+        <p class="text-3xl font-bold text-white" id="stat-total">—</p>
+        <p class="text-slate-600 text-xs mt-1">all hospitals</p>
+      </div>
+      <div class="glass rounded-2xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">FL Rounds</p>
+        <p class="text-3xl font-bold text-white" id="stat-rounds">—</p>
+        <p class="text-slate-600 text-xs mt-1">active rounds</p>
+      </div>
+      <div class="glass rounded-2xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">COVID-19</p>
+        <p class="text-3xl font-bold text-blue-400" id="stat-covid">—</p>
+        <p class="text-slate-600 text-xs mt-1">updates submitted</p>
+      </div>
+      <div class="glass rounded-2xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Skin Cancer</p>
+        <p class="text-3xl font-bold text-emerald-400" id="stat-skin">—</p>
+        <p class="text-slate-600 text-xs mt-1">updates submitted</p>
+      </div>
+    </div>
+
+    <!-- ── HOSPITAL SIMULATOR ─────────────────────────────────────────────────── -->
+    <div class="glass rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-white font-semibold text-lg">Simulate Hospital Training</h2>
+          <p class="text-slate-500 text-sm mt-0.5">Run a federated learning round as a hospital — no terminal needed</p>
+        </div>
+        <span id="sim-status-badge" class="pill badge-none hidden"></span>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-5">
+        <div class="lg:col-span-2">
+          <label>Hospital Name</label>
+          <input id="sim-sender" type="text" placeholder="e.g. Hospital1" value="Hospital1" />
+        </div>
+        <div>
+          <label>Model</label>
+          <select id="sim-model">
+            <option value="covid">COVID-19</option>
+            <option value="skin">Skin Cancer</option>
+          </select>
+        </div>
+        <div>
+          <label>Round</label>
+          <input id="sim-round" type="number" value="1" min="1" />
+        </div>
+        <div>
+          <label>DP Clip</label>
+          <input id="sim-clip" type="number" value="1.0" step="0.1" min="0.1" />
+        </div>
+        <div>
+          <label>DP Noise</label>
+          <input id="sim-noise" type="number" value="0.1" step="0.01" min="0" />
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 flex-wrap">
+        <button class="btn btn-primary" id="btn-simulate" onclick="runSimulate(false)">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+          Submit Hospital Update
+        </button>
+        <button class="btn btn-success" id="btn-simulate-pull" onclick="runSimulate(true)">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Pull Global + Submit
+        </button>
+        <div class="flex items-center gap-2 ml-auto">
+          <button class="btn btn-outline text-xs" onclick="triggerAgg('covid')">Force FedAvg COVID</button>
+          <button class="btn btn-outline text-xs" onclick="triggerAgg('skin')">Force FedAvg Skin</button>
+        </div>
+      </div>
+
+      <!-- Terminal output -->
+      <div id="sim-log-wrap" class="mt-4 hidden">
+        <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Output</p>
+        <div class="terminal" id="sim-log"></div>
+      </div>
+    </div>
+
+    <!-- ── MODEL PANELS ───────────────────────────────────────────────────────── -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="panel-covid" class="glass rounded-2xl p-6 glow-blue"></div>
+      <div id="panel-skin"  class="glass rounded-2xl p-6 glow-green"></div>
+    </div>
+
+    <!-- ── ACTIVITY FEED + TABLE ─────────────────────────────────────────────── -->
+    <div class="glass rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-white font-semibold text-lg">All Hospital Updates</h2>
+        <span class="text-slate-500 text-xs" id="table-count"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-500 text-xs uppercase border-b sep">
+              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">Hospital</th>
+              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">Model</th>
+              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">Round</th>
+              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">IPFS CID</th>
+              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">DP Clip</th>
+              <th class="text-left pb-3 font-semibold tracking-wider">Time</th>
+            </tr>
+          </thead>
+          <tbody id="updates-table"></tbody>
+        </table>
+        <p id="no-updates" class="text-slate-600 text-sm text-center py-10 hidden">
+          No hospital updates yet. Use the simulator above to submit one.
+        </p>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    const MIN_CLIENTS = 2;
+    const POLL_MS     = 5000;
+
+    // ── Helpers ──────────────────────────────────────────────────────────────────
+
+    async function fetchJSON(url, opts) {
+      const r = await fetch(url, opts);
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
+    }
+
+    async function fetchGlobalModel(modelType) {
+      try { return await fetchJSON(`/api/global-model/${modelType}/latest`); }
+      catch { return null; }
+    }
+
+    function shortCID(cid) {
+      if (!cid) return '—';
+      return cid.length > 16 ? cid.slice(0,8) + '…' + cid.slice(-6) : cid;
+    }
+
+    function fmtTime(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleTimeString();
+    }
+
+    function badge(status) {
+      const map = {
+        waiting:     ['badge-waiting',     '● Waiting'],
+        aggregating: ['badge-aggregating', '↻ Aggregating'],
+        done:        ['badge-done',        '✓ Aggregated'],
+        none:        ['badge-none',        '○ No Data'],
+      };
+      const [cls, label] = map[status] || map.none;
+      return `<span class="pill ${cls}">${label}</span>`;
+    }
+
+    // ── Simulator ────────────────────────────────────────────────────────────────
+
+    async function runSimulate(pullGlobal) {
+      const sender    = document.getElementById('sim-sender').value.trim();
+      const modelType = document.getElementById('sim-model').value;
+      const round     = parseInt(document.getElementById('sim-round').value);
+      const clip      = parseFloat(document.getElementById('sim-clip').value);
+      const noise     = parseFloat(document.getElementById('sim-noise').value);
+
+      if (!sender) { alert('Please enter a hospital name.'); return; }
+
+      const btnA = document.getElementById('btn-simulate');
+      const btnB = document.getElementById('btn-simulate-pull');
+      const logWrap = document.getElementById('sim-log-wrap');
+      const logEl   = document.getElementById('sim-log');
+      const badge   = document.getElementById('sim-status-badge');
+
+      btnA.disabled = true;
+      btnB.disabled = true;
+      logWrap.classList.remove('hidden');
+      logEl.innerHTML = `<span class="log-info">Starting ${sender} · ${modelType.toUpperCase()} · Round ${round}${pullGlobal ? ' · pulling global model' : ''}…</span>\n`;
+      badge.className = 'pill badge-aggregating';
+      badge.textContent = '↻ Running';
+      badge.classList.remove('hidden');
+
+      try {
+        const res = await fetchJSON('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sender, modelType, round, clip, noise, pullGlobal }),
+        });
+
+        const lines = (res.output || res.error || 'No output').split('\n');
+        logEl.innerHTML = lines.map(l => {
+          if (!l.trim()) return '';
+          if (l.includes('ERROR') || l.includes('Error') || l.includes('error')) return `<span class="log-error">${l}</span>`;
+          if (l.includes('CID') || l.includes('complete') || l.includes('OK')) return `<span class="log-success">${l}</span>`;
+          if (l.startsWith('  ') || l.includes('[')) return `<span class="log-info">${l}</span>`;
+          return `<span>${l}</span>`;
+        }).filter(Boolean).join('\n');
+
+        logEl.scrollTop = logEl.scrollHeight;
+
+        badge.className  = `pill ${res.success ? 'badge-done' : 'badge-waiting'}`;
+        badge.textContent = res.success ? '✓ Done' : '✗ Failed';
+
+        if (res.success) refresh();
+
+      } catch (err) {
+        logEl.innerHTML += `<span class="log-error">Request failed: ${err.message}</span>`;
+        badge.className  = 'pill badge-waiting';
+        badge.textContent = '✗ Failed';
+      }
+
+      btnA.disabled = false;
+      btnB.disabled = false;
+    }
+
+    async function setupWallet() {
+      const logEl = document.getElementById('server-log') || document.querySelector('[id^=log-]');
+      showLog('server');
+      try {
+        const r = await fetchJSON('/launcher/server/setup-wallet', { method: 'POST' });
+        alert(r.ok ? 'Wallet ready — admin + appUser enrolled!' : 'Error: ' + r.error);
+      } catch(e) {
+        alert('Setup wallet failed: ' + e.message);
+      }
+    }
+
+    async function triggerAgg(modelType) {
+      const round = parseInt(document.getElementById('sim-round').value);
+      try {
+        const r = await fetchJSON('/api/aggregate-now', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ round, modelType }),
+        });
+        const logEl = document.getElementById('sim-log');
+        document.getElementById('sim-log-wrap').classList.remove('hidden');
+        logEl.innerHTML += `<span class="log-info">\nManual FedAvg triggered: ${r.message}</span>\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+      } catch(e) {
+        alert('Failed to trigger aggregation: ' + e.message);
+      }
+    }
+
+    // ── Model panel ──────────────────────────────────────────────────────────────
+
+    function renderModelPanel(el, modelType, allUpdates, globalModel) {
+      const isCovid   = modelType === 'covid';
+      const label     = isCovid ? 'COVID-19' : 'Skin Cancer';
+      const color     = isCovid ? 'blue' : 'emerald';
+      const accent    = isCovid ? '#3b82f6' : '#10b981';
+      const updates   = allUpdates.filter(u => u.modelType === modelType);
+
+      const byRound = {};
+      updates.forEach(u => {
+        if (!byRound[u.round]) byRound[u.round] = [];
+        byRound[u.round].push(u);
+      });
+      const rounds    = Object.keys(byRound).map(Number).sort((a,b) => b - a);
+      const latestRnd = rounds[0] ?? null;
+      const latestCnt = latestRnd ? byRound[latestRnd].length : 0;
+
+      let aggStatus = 'none';
+      if (latestRnd !== null) {
+        if (globalModel && globalModel.round === latestRnd) aggStatus = 'done';
+        else if (latestCnt >= MIN_CLIENTS)                  aggStatus = 'aggregating';
+        else                                                 aggStatus = 'waiting';
+      }
+
+      const pct    = latestRnd ? Math.min(100, (latestCnt / MIN_CLIENTS) * 100) : 0;
+      const barClr = isCovid ? 'bg-blue-500' : 'bg-emerald-500';
+
+      const roundRows = rounds.slice(0, 5).map(r => {
+        const clients  = byRound[r];
+        const isGlobal = globalModel && globalModel.round === r;
+        return `
+          <div class="py-3 border-b sep last:border-0">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-slate-200 font-semibold text-sm">Round ${r}</span>
+              <div class="flex items-center gap-2">
+                ${isGlobal ? `<span class="pill badge-done text-xs">Aggregated</span>` : `<span class="text-slate-500 text-xs">${clients.length}/${MIN_CLIENTS} submitted</span>`}
+              </div>
+            </div>
+            <div class="space-y-1.5 mb-2">
+              ${clients.map(c => `
+                <div class="flex items-center gap-2">
+                  <span class="text-${color}-400 font-medium text-xs w-24 truncate">${c.sender}</span>
+                  <span class="cid flex-1 truncate" title="${c.ipfsCID}">${shortCID(c.ipfsCID)}</span>
+                  <span class="text-slate-600 text-xs">${fmtTime(c.timestamp)}</span>
+                </div>`).join('')}
+            </div>
+            ${isGlobal ? `
+              <div class="p-2.5 rounded-xl glass-dark mt-1">
+                <p class="text-xs text-${color}-400 font-semibold mb-1">Global Model</p>
+                <p class="cid truncate" title="${globalModel.ipfsCID}">${globalModel.ipfsCID}</p>
+                <p class="text-slate-600 text-xs mt-1">${globalModel.clientCount} hospitals merged · ${fmtTime(globalModel.timestamp)}</p>
+              </div>` : ''}
+          </div>`;
+      }).join('');
+
+      el.innerHTML = `
+        <div class="flex items-center justify-between mb-5">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                 style="background:linear-gradient(135deg,${accent}33,${accent}11);color:${accent};border:1px solid ${accent}33">
+              ${isCovid ? '🫁' : '🔬'}
+            </div>
+            <h2 class="text-white font-semibold text-base">${label}</h2>
+          </div>
+          ${badge(aggStatus)}
+        </div>
+
+        <div class="mb-5">
+          <div class="flex justify-between text-xs mb-1.5">
+            <span class="text-slate-500">Round ${latestRnd ?? '—'}</span>
+            <span class="text-slate-400 font-medium">${latestCnt} / ${MIN_CLIENTS} hospitals</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill ${barClr}" style="width:${pct}%"></div>
+          </div>
+        </div>
+
+        <div class="glass-dark rounded-xl p-3 mb-5">
+          <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Latest Global Model</p>
+          ${globalModel
+            ? `<p class="cid truncate" title="${globalModel.ipfsCID}">${globalModel.ipfsCID}</p>
+               <p class="text-slate-600 text-xs mt-1.5">Round ${globalModel.round} · ${globalModel.clientCount} clients · ${fmtTime(globalModel.timestamp)}</p>`
+            : `<p class="text-slate-600 text-sm">Not yet aggregated</p>`}
+        </div>
+
+        <div>
+          <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Round History</p>
+          ${rounds.length
+            ? roundRows
+            : `<div class="text-center py-6">
+                 <p class="text-slate-600 text-sm">No updates yet</p>
+                 <p class="text-slate-700 text-xs mt-1">Use the simulator above to submit</p>
+               </div>`}
+        </div>`;
+    }
+
+    // ── Updates table ────────────────────────────────────────────────────────────
+
+    function renderTable(updates) {
+      const tbody  = document.getElementById('updates-table');
+      const noEl   = document.getElementById('no-updates');
+      const count  = document.getElementById('table-count');
+      const sorted = [...updates].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      count.textContent = sorted.length ? `${sorted.length} record${sorted.length !== 1 ? 's' : ''}` : '';
+
+      if (!sorted.length) {
+        tbody.innerHTML = '';
+        noEl.classList.remove('hidden');
+        return;
+      }
+      noEl.classList.add('hidden');
+
+      tbody.innerHTML = sorted.map((u, i) => `
+        <tr class="${i % 2 === 0 ? 'tr-even' : 'tr-odd'} cursor-default">
+          <td class="py-2.5 pr-4 font-semibold text-white text-sm">${u.sender}</td>
+          <td class="py-2.5 pr-4">
+            <span class="pill ${u.modelType === 'covid' ? 'badge-waiting' : 'badge-done'}">
+              ${u.modelType === 'covid' ? '🫁 COVID' : '🔬 Skin'}
+            </span>
+          </td>
+          <td class="py-2.5 pr-4 text-slate-300 font-medium">${u.round}</td>
+          <td class="py-2.5 pr-4 max-w-[160px]">
+            <span class="cid truncate block" title="${u.ipfsCID}">${shortCID(u.ipfsCID)}</span>
+          </td>
+          <td class="py-2.5 pr-4 text-slate-400 text-sm">${u.clipValue ?? '—'}</td>
+          <td class="py-2.5 text-slate-500 text-sm">${fmtTime(u.timestamp)}</td>
+        </tr>`).join('');
+    }
+
+    // ── Stats ────────────────────────────────────────────────────────────────────
+
+    function renderStats(updates) {
+      const covid  = updates.filter(u => u.modelType === 'covid').length;
+      const skin   = updates.filter(u => u.modelType === 'skin').length;
+      const rounds = new Set(updates.map(u => `${u.modelType}-${u.round}`)).size;
+      document.getElementById('stat-total').textContent  = updates.length;
+      document.getElementById('stat-rounds').textContent = rounds;
+      document.getElementById('stat-covid').textContent  = covid;
+      document.getElementById('stat-skin').textContent   = skin;
+    }
+
+    // ── Server status ────────────────────────────────────────────────────────────
+
+    function setStatus(ok) {
+      document.getElementById('status-dot').className  = `w-2 h-2 rounded-full ${ok ? 'dot-online' : 'dot-offline'}`;
+      document.getElementById('status-text').textContent = ok ? 'Server online' : 'Server unreachable';
+    }
+
+    // ── Poll ─────────────────────────────────────────────────────────────────────
+
+    async function refresh() {
+      try {
+        const [updatesRes, globalCovid, globalSkin] = await Promise.all([
+          fetchJSON('/api/updates'),
+          fetchGlobalModel('covid'),
+          fetchGlobalModel('skin'),
+        ]);
+        const updates = updatesRes.updates ?? [];
+        setStatus(true);
+        renderStats(updates);
+        renderModelPanel(document.getElementById('panel-covid'), 'covid', updates, globalCovid);
+        renderModelPanel(document.getElementById('panel-skin'),  'skin',  updates, globalSkin);
+        renderTable(updates);
+        document.getElementById('last-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+      } catch {
+        setStatus(false);
+      }
+    }
+
+    refresh();
+    setInterval(refresh, POLL_MS);
+
+    // ── Services control ──────────────────────────────────────────────────────
+
+    const svcColors = { ipfs: 'dot-online', fabric: 'dot-online', server: 'dot-online' };
+    let activeLogTab = null;
+    const logBuffers = { ipfs: '', fabric: '', server: '' };
+
+    async function svcStart(svc) {
+      document.getElementById(`btn-start-${svc}`).disabled = true;
+      document.getElementById(`label-${svc}`).textContent = 'Starting…';
+      try {
+        await fetch(`/launcher/${svc}/start`, { method: 'POST' });
+        subscribeLog(svc);
+        showLog(svc);
+      } catch(e) {
+        document.getElementById(`label-${svc}`).textContent = 'Error';
+        document.getElementById(`btn-start-${svc}`).disabled = false;
+      }
+    }
+
+    async function svcStop(svc) {
+      await fetch(`/launcher/${svc}/stop`, { method: 'POST' });
+    }
+
+    function subscribeLog(svc) {
+      if (window[`_sse_${svc}`]) return; // already subscribed
+      const es = new EventSource(`/launcher/${svc}/logs`);
+      window[`_sse_${svc}`] = es;
+      es.onmessage = e => {
+        const { line, level } = JSON.parse(e.data);
+        const cls = level === 'error' ? 'log-error' : level === 'warn' ? 'log-info' : '';
+        logBuffers[svc] += `<span class="${cls}">${escHtml(line)}</span>\n`;
+        if (activeLogTab === svc) flushLog(svc);
+      };
+    }
+
+    function showLog(svc) {
+      activeLogTab = svc;
+      ['ipfs','fabric','server'].forEach(s => {
+        const tab = document.getElementById(`tab-${s}`);
+        tab.className = s === svc
+          ? 'btn btn-primary text-xs py-1 px-3'
+          : 'btn btn-outline text-xs py-1 px-3';
+      });
+      subscribeLog(svc);
+      flushLog(svc);
+    }
+
+    function flushLog(svc) {
+      const el = document.getElementById('svc-log');
+      el.innerHTML = logBuffers[svc] || '<span class="log-dim">No logs yet…</span>';
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // Poll service status
+    async function pollServices() {
+      try {
+        const s = await fetch('/launcher/status').then(r => r.json());
+        ['ipfs','fabric','server'].forEach(svc => {
+          const running = s[svc];
+          const dot   = document.getElementById(`dot-${svc}`);
+          const label = document.getElementById(`label-${svc}`);
+          const btnStart = document.getElementById(`btn-start-${svc}`);
+          const btnStop  = document.getElementById(`btn-stop-${svc}`);
+          dot.className   = `w-2 h-2 rounded-full ${running ? 'dot-online' : 'dot-offline'}`;
+          label.textContent = running ? 'Running' : 'Stopped';
+          label.className   = `text-xs font-medium ${running ? 'text-emerald-400' : 'text-slate-500'}`;
+          btnStart.disabled = running;
+          btnStop.disabled  = !running;
+          if (running) subscribeLog(svc);
+        });
+      } catch {
+        // launcher not available — hide services panel gracefully
+      }
+    }
+
+    pollServices();
+    setInterval(pollServices, 3000);
+  </script>
+</body>
+</html>
