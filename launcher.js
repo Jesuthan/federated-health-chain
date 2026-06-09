@@ -98,72 +98,54 @@ function stopIPFS() {
   return { ok: true };
 }
 
-function findBash() {
-  const candidates = [
-    'C:\\Program Files\\Git\\bin\\bash.exe',
-    'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
-  ];
-  return candidates.find(fs.existsSync) || 'bash';
+// WSL2 Ubuntu is the correct environment for Fabric test-network scripts.
+// Git Bash has unresolvable path-conversion conflicts between Docker and Windows binaries.
+function wslRun(script) {
+  return spawn('wsl', ['-d', 'Ubuntu', '--', 'bash', '-c', script], { shell: false });
 }
 
-// Use C:\fabric-samples junction (no spaces) so Fabric peer binaries handle the path correctly.
-// On a machine where the home dir has spaces (e.g. "Smart Touch PC"), the junction is required.
-const FABRIC_SAMPLES_DIR = fs.existsSync('C:\\fabric-samples\\test-network')
-  ? '/c/fabric-samples'
-  : null;
-
 function fabricSamplesExists() {
-  if (FABRIC_SAMPLES_DIR) return true;
-  const bash = findBash();
   try {
-    const result = require('child_process').spawnSync(bash, ['-c', 'test -d ~/fabric-samples/test-network && echo yes || echo no']);
-    return result.stdout.toString().trim() === 'yes';
+    const r = require('child_process').spawnSync(
+      'wsl', ['-d', 'Ubuntu', '--', 'bash', '-c',
+        'test -d ~/fabric-samples/test-network && echo yes || echo no']
+    );
+    return r.stdout.toString().trim() === 'yes';
   } catch { return false; }
 }
 
 function startFabric() {
   if (isRunning('fabric')) return { ok: false, error: 'Fabric already running' };
 
-  const bash = findBash();
-
-  // Convert chaincode path to bash-friendly format (no spaces)
+  // Chaincode lives on Windows at D:\tmp\fedlearn-fabric\chaincode\modelregistry
+  // From WSL2 that path is /mnt/d/tmp/fedlearn-fabric/chaincode/modelregistry
   const chaincodePath = path.join(__dirname, 'chaincode', 'modelregistry')
     .replace(/\\/g, '/')
-    .replace(/^([A-Z]):/, (_, d) => `/${d.toLowerCase()}`);
+    .replace(/^([A-Z]):/, (_, d) => `/mnt/${d.toLowerCase()}`);
 
-  const fabricDir = FABRIC_SAMPLES_DIR || '~/fabric-samples';
-
-  // If fabric-samples not installed yet, install it first
   const installStep = fabricSamplesExists()
     ? ''
     : 'cd ~ && curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.5.0 1.5.5 && ';
 
   const script = [
-    installStep + `cd "${fabricDir}/test-network"`,
+    installStep + 'cd ~/fabric-samples/test-network',
+    './network.sh down',
     './network.sh up createChannel -ca',
     `./network.sh deployCC -ccn modelregistry -ccp "${chaincodePath}" -ccl javascript`,
   ].join(' && ');
 
   if (!fabricSamplesExists()) {
-    pushLog('fabric', 'fabric-samples not found — installing Hyperledger Fabric first (this takes a few minutes)…', 'warn');
+    pushLog('fabric', 'fabric-samples not found in WSL2 — installing (this takes a few minutes)…', 'warn');
   }
-  pushLog('fabric', `Starting Fabric network via Git Bash (using ${fabricDir})…`, 'info');
+  pushLog('fabric', 'Starting Fabric network via WSL2 Ubuntu…', 'info');
 
-  // MSYS_NO_PATHCONV=1 stops Git Bash from converting /var → C:\Program Files\Git\var
-  // when passing volume paths to Docker. Without this, peer containers fail to start.
-  const fabricEnv = {
-    ...process.env,
-    MSYS_NO_PATHCONV: '1',
-    MSYS2_ARG_CONV_EXCL: '*',
-  };
-
-  const proc = spawn(bash, ['-c', script], { shell: false, env: fabricEnv });
+  const proc = wslRun(script);
   procs.fabric.proc = proc;
 
   proc.stdout.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => pushLog('fabric', l)));
   proc.stderr.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => pushLog('fabric', l, 'warn')));
   proc.on('close', code => {
-    pushLog('fabric', `Fabric setup ${code === 0 ? 'complete' : 'failed'} (code ${code})`, code === 0 ? 'info' : 'error');
+    pushLog('fabric', `Fabric setup ${code === 0 ? 'complete ✓' : 'failed'} (code ${code})`, code === 0 ? 'info' : 'error');
     procs.fabric.proc = null;
   });
 
@@ -171,13 +153,9 @@ function startFabric() {
 }
 
 function stopFabric() {
-  const bash = findBash();
-  const fabricDir = FABRIC_SAMPLES_DIR || '~/fabric-samples';
-
   pushLog('fabric', 'Stopping Fabric network…', 'warn');
 
-  const fabricEnv = { ...process.env, MSYS_NO_PATHCONV: '1', MSYS2_ARG_CONV_EXCL: '*' };
-  spawn(bash, ['-c', `cd "${fabricDir}/test-network" && ./network.sh down`], { shell: false, env: fabricEnv })
+  wslRun('cd ~/fabric-samples/test-network && ./network.sh down')
     .stdout.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => pushLog('fabric', l)));
 
   if (procs.fabric.proc) { procs.fabric.proc.kill(); procs.fabric.proc = null; }
@@ -234,17 +212,15 @@ function stopFLServer() {
   return { ok: true };
 }
 
-function setupWallet(res) {
+function runEnrollAdmin(res) {
   const serverDir = path.join(__dirname, 'server');
-
-  pushLog('server', 'Running enrollAdmin + registerUser…', 'info');
+  pushLog('server', 'Running enrollAdmin.js…', 'info');
 
   const enroll = require('child_process').spawnSync(
     process.execPath, ['enrollAdmin.js'],
     { cwd: serverDir, shell: false, stdio: 'pipe', env: { ...process.env } }
   );
-  const enrollOut = enroll.stdout.toString() + enroll.stderr.toString();
-  enrollOut.split('\n').filter(Boolean).forEach(l => pushLog('server', l));
+  (enroll.stdout.toString() + enroll.stderr.toString()).split('\n').filter(Boolean).forEach(l => pushLog('server', l));
 
   if (enroll.status !== 0) {
     const err = 'enrollAdmin failed — is the Fabric network running?';
@@ -252,21 +228,28 @@ function setupWallet(res) {
     return res.status(500).json({ ok: false, error: err });
   }
 
+  pushLog('server', 'Admin enrolled successfully.', 'info');
+  return res.json({ ok: true, message: 'Admin enrolled' });
+}
+
+function runRegisterUser(res) {
+  const serverDir = path.join(__dirname, 'server');
+  pushLog('server', 'Running registerUser.js…', 'info');
+
   const register = require('child_process').spawnSync(
     process.execPath, ['registerUser.js'],
     { cwd: serverDir, shell: false, stdio: 'pipe', env: { ...process.env } }
   );
-  const regOut = register.stdout.toString() + register.stderr.toString();
-  regOut.split('\n').filter(Boolean).forEach(l => pushLog('server', l));
+  (register.stdout.toString() + register.stderr.toString()).split('\n').filter(Boolean).forEach(l => pushLog('server', l));
 
   if (register.status !== 0) {
-    const err = 'registerUser failed';
+    const err = 'registerUser failed — check FL Server log for details';
     pushLog('server', err, 'error');
     return res.status(500).json({ ok: false, error: err });
   }
 
-  pushLog('server', 'Wallet ready — admin + appUser enrolled.', 'info');
-  return res.json({ ok: true, message: 'Wallet setup complete' });
+  pushLog('server', 'appUser registered and enrolled. Wallet ready.', 'info');
+  return res.json({ ok: true, message: 'appUser registered and enrolled' });
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -299,8 +282,18 @@ app.post('/launcher/:service/stop', (req, res) => {
   res.json(result);
 });
 
-// Wallet setup (enroll admin + register appUser)
-app.post('/launcher/server/setup-wallet', (req, res) => setupWallet(res));
+// Wallet setup — two separate steps
+app.post('/launcher/server/enroll-admin',   (req, res) => runEnrollAdmin(res));
+app.post('/launcher/server/register-user',  (req, res) => runRegisterUser(res));
+
+// Wallet status — check which identities exist in the wallet
+app.get('/launcher/server/wallet-status', (_req, res) => {
+  const walletPath = path.join(__dirname, 'server', 'wallet');
+  const has = (name) => {
+    try { return fs.existsSync(path.join(walletPath, `${name}.id`)); } catch { return false; }
+  };
+  res.json({ admin: has('admin'), appUser: has('appUser') });
+});
 
 // SSE log stream
 app.get('/launcher/:service/logs', (req, res) => {

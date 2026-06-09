@@ -3,88 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BFL Healthcare — Federated Learning</title>
+  <title>BFL Healthcare — Federated Learning Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; }
-    body { background: #070d1a; font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #f1f5f9; font-family: 'Inter', system-ui, sans-serif; color: #0f172a; }
 
-    /* Glass cards */
-    .glass {
-      background: rgba(30, 41, 59, 0.7);
-      border: 1px solid rgba(100, 116, 139, 0.2);
-      backdrop-filter: blur(12px);
-    }
-    .glass-dark {
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid rgba(100, 116, 139, 0.15);
-    }
-
-    /* Gradients */
-    .grad-blue   { background: linear-gradient(135deg, #1d4ed8, #7c3aed); }
-    .grad-green  { background: linear-gradient(135deg, #065f46, #0f766e); }
-    .grad-header { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%); }
-
-    /* Glow effects */
-    .glow-blue  { box-shadow: 0 0 20px rgba(59,130,246,0.15); }
-    .glow-green { box-shadow: 0 0 20px rgba(16,185,129,0.15); }
+    /* Cards */
+    .card  { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+    .card-inner { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
 
     /* Badges */
-    .pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:9999px; font-size:0.7rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; }
-    .badge-waiting     { background:rgba(30,64,175,0.3);  color:#93c5fd; border:1px solid rgba(59,130,246,0.3); }
-    .badge-aggregating { background:rgba(120,53,15,0.3);  color:#fcd34d; border:1px solid rgba(251,191,36,0.3); }
-    .badge-done        { background:rgba(6,78,59,0.3);    color:#6ee7b7; border:1px solid rgba(52,211,153,0.3); }
-    .badge-none        { background:rgba(51,65,85,0.3);   color:#94a3b8; border:1px solid rgba(100,116,139,0.2); }
+    .pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:9999px;
+            font-size:0.7rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+    .badge-waiting     { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+    .badge-aggregating { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+    .badge-done        { background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; }
+    .badge-none        { background:#f8fafc; color:#64748b; border:1px solid #e2e8f0; }
+
+    /* Status dots */
+    .dot-online  { background:#22c55e; box-shadow:0 0 0 3px #dcfce7; }
+    .dot-offline { background:#ef4444; box-shadow:0 0 0 3px #fee2e2; }
+    .dot-unknown { background:#94a3b8; box-shadow:0 0 0 3px #f1f5f9; }
+
+    /* Wallet dots */
+    .w-dot-on  { background:#22c55e; }
+    .w-dot-off { background:#cbd5e1; }
 
     /* Monospace CID */
     .cid { font-family: 'Courier New', monospace; font-size:0.7rem; color:#64748b; word-break:break-all; }
 
-    /* Separator */
-    .sep { border-color: rgba(100,116,139,0.15); }
+    /* Divider */
+    .sep { border-color: #e2e8f0; }
 
-    /* Table rows */
-    .tr-even { background: rgba(30,41,59,0.4); }
-    .tr-odd  { background: rgba(15,23,42,0.4); }
-    tr:hover { background: rgba(51,65,85,0.3) !important; }
-
-    /* Animations */
-    @keyframes spin    { to { transform: rotate(360deg); } }
-    @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.4} }
-    @keyframes fadeIn  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-    @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
-
-    .spinning  { animation: spin 1s linear infinite; }
-    .pulsing   { animation: pulse 2s ease-in-out infinite; }
-    .fade-in   { animation: fadeIn 0.3s ease-out; }
-
-    .skeleton {
-      background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s infinite;
-      border-radius: 4px;
-    }
-
-    /* Custom scrollbar */
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-
-    /* Dot indicator */
-    .dot-online  { background:#22c55e; box-shadow: 0 0 6px #22c55e; }
-    .dot-offline { background:#ef4444; box-shadow: 0 0 6px #ef4444; }
-    .dot-unknown { background:#94a3b8; }
+    /* Table */
+    .tbl-head th { background:#f8fafc; color:#64748b; font-size:0.7rem; font-weight:600;
+                   text-transform:uppercase; letter-spacing:0.06em; padding:10px 14px; border-bottom:1px solid #e2e8f0; }
+    .tbl-row td  { padding:10px 14px; border-bottom:1px solid #f1f5f9; font-size:0.85rem; }
+    .tbl-row:hover td { background:#f8fafc; }
+    .tbl-row:last-child td { border-bottom:none; }
 
     /* Log terminal */
     .terminal {
-      background: #020812;
-      border: 1px solid rgba(100,116,139,0.2);
+      background: #0f172a;
+      border: 1px solid #1e293b;
       border-radius: 8px;
       font-family: 'Courier New', monospace;
       font-size: 0.72rem;
-      line-height: 1.6;
+      line-height: 1.7;
       color: #94a3b8;
-      padding: 12px;
-      max-height: 180px;
+      padding: 14px;
+      max-height: 200px;
       overflow-y: auto;
     }
     .log-success { color: #4ade80; }
@@ -92,101 +64,147 @@
     .log-info    { color: #60a5fa; }
     .log-dim     { color: #475569; }
 
-    /* Btn */
-    .btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 18px; border-radius: 8px; font-size: 0.85rem;
-      font-weight: 600; cursor: pointer; transition: all 0.15s;
-      border: none; outline: none;
-    }
-    .btn:active { transform: scale(0.97); }
-    .btn-primary  { background: linear-gradient(135deg,#3b82f6,#6366f1); color:#fff; }
-    .btn-primary:hover  { filter: brightness(1.1); }
-    .btn-success  { background: linear-gradient(135deg,#059669,#0d9488); color:#fff; }
-    .btn-success:hover  { filter: brightness(1.1); }
-    .btn-outline  { background: transparent; color:#94a3b8; border:1px solid rgba(100,116,139,0.3); }
-    .btn-outline:hover  { border-color:#6366f1; color:#c7d2fe; }
-    .btn-danger   { background: rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); }
-    .btn-danger:hover   { background: rgba(239,68,68,0.25); }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+    /* Scrollbar */
+    .terminal::-webkit-scrollbar { width:4px; }
+    .terminal::-webkit-scrollbar-track { background:#0f172a; }
+    .terminal::-webkit-scrollbar-thumb { background:#334155; border-radius:2px; }
 
-    /* Form inputs */
-    input, select {
-      background: rgba(15,23,42,0.8);
-      border: 1px solid rgba(100,116,139,0.25);
-      color: #e2e8f0;
-      border-radius: 8px;
-      padding: 8px 12px;
-      font-size: 0.85rem;
-      outline: none;
-      transition: border-color 0.15s;
-      width: 100%;
+    /* Buttons */
+    .btn {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:8px 16px; border-radius:8px; font-size:0.83rem;
+      font-weight:600; cursor:pointer; transition:all 0.15s;
+      border:none; outline:none; white-space:nowrap;
     }
-    input:focus, select:focus { border-color: #6366f1; }
-    input::placeholder { color: #475569; }
-    select option { background: #1e293b; }
-    label { color: #94a3b8; font-size: 0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:4px; }
+    .btn:active { transform:scale(0.98); }
+    .btn-primary { background:#1d4ed8; color:#fff; }
+    .btn-primary:hover { background:#1e40af; }
+    .btn-success { background:#059669; color:#fff; }
+    .btn-success:hover { background:#047857; }
+    .btn-outline { background:#fff; color:#374151; border:1px solid #d1d5db; }
+    .btn-outline:hover { border-color:#1d4ed8; color:#1d4ed8; background:#eff6ff; }
+    .btn-danger  { background:#fff; color:#dc2626; border:1px solid #fecaca; }
+    .btn-danger:hover { background:#fef2f2; }
+    .btn:disabled { opacity:0.45; cursor:not-allowed; transform:none !important; }
+
+    /* Form */
+    label { color:#374151; font-size:0.75rem; font-weight:600; display:block; margin-bottom:4px; }
+    input, select {
+      background:#fff; border:1px solid #d1d5db; color:#0f172a;
+      border-radius:8px; padding:8px 12px; font-size:0.85rem;
+      outline:none; transition:border-color 0.15s; width:100%;
+    }
+    input:focus, select:focus { border-color:#1d4ed8; box-shadow:0 0 0 3px #dbeafe; }
+    input::placeholder { color:#9ca3af; }
+    select option { background:#fff; color:#0f172a; }
 
     /* Progress bar */
-    .progress-track { background: rgba(51,65,85,0.5); border-radius: 9999px; overflow: hidden; height: 6px; }
-    .progress-fill  { height: 100%; border-radius: 9999px; transition: width 0.5s ease; }
+    .progress-track { background:#e2e8f0; border-radius:9999px; overflow:hidden; height:6px; }
+    .progress-fill  { height:100%; border-radius:9999px; transition:width 0.5s ease; }
+
+    /* Stat cards */
+    .stat-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; }
+
+    /* Animations */
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+    .fade-in { animation:fadeIn 0.25s ease-out; }
+
+    /* Section titles */
+    .section-title { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin-bottom:16px; }
+
+    /* Step indicator */
+    .step-num { width:22px; height:22px; border-radius:9999px; background:#1d4ed8; color:#fff;
+                font-size:0.7rem; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
   </style>
 </head>
-<body class="text-slate-300 min-h-screen">
+<body class="min-h-screen">
 
   <!-- ── HEADER ─────────────────────────────────────────────────────────────── -->
-  <header class="grad-header border-b border-slate-800/60 sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+  <header style="background:#fff; border-bottom:1px solid #e2e8f0;" class="sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl grad-blue flex items-center justify-center text-white font-bold text-sm">BFL</div>
+        <div style="background:linear-gradient(135deg,#1d4ed8,#0f766e); border-radius:10px; width:36px; height:36px;"
+             class="flex items-center justify-center text-white font-bold text-sm flex-shrink-0">BFL</div>
         <div>
-          <h1 class="text-white font-bold text-lg leading-none">BFL Healthcare</h1>
-          <p class="text-slate-500 text-xs mt-0.5">Federated Learning · Blockchain · IPFS</p>
+          <h1 style="font-size:1rem; font-weight:700; color:#0f172a; line-height:1.2;">BFL Healthcare</h1>
+          <p style="font-size:0.72rem; color:#64748b;">Federated Learning · Hyperledger Fabric · IPFS</p>
         </div>
       </div>
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
-          <span id="status-dot" class="w-2 h-2 rounded-full dot-unknown"></span>
-          <span id="status-text" class="text-slate-400 text-sm">Connecting…</span>
+          <span id="status-dot" class="w-2.5 h-2.5 rounded-full dot-unknown inline-block"></span>
+          <span id="status-text" style="font-size:0.82rem; color:#64748b;">Connecting…</span>
         </div>
-        <span class="text-slate-600 text-xs" id="last-refresh"></span>
+        <span style="font-size:0.72rem; color:#94a3b8;" id="last-refresh"></span>
       </div>
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+  <main class="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
-    <!-- ── SERVICES CONTROL ──────────────────────────────────────────────────── -->
-    <div class="glass rounded-2xl p-6">
-      <h2 class="text-white font-semibold text-lg mb-5">Services</h2>
+    <!-- ── STATS ROW ────────────────────────────────────────────────────────── -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="card p-5 flex items-center gap-4">
+        <div class="stat-icon" style="background:#eff6ff;">📋</div>
+        <div>
+          <p style="font-size:0.72rem; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Total Updates</p>
+          <p style="font-size:1.6rem; font-weight:700; color:#0f172a; line-height:1.2;" id="stat-total">—</p>
+        </div>
+      </div>
+      <div class="card p-5 flex items-center gap-4">
+        <div class="stat-icon" style="background:#f0fdf4;">🔄</div>
+        <div>
+          <p style="font-size:0.72rem; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">FL Rounds</p>
+          <p style="font-size:1.6rem; font-weight:700; color:#0f172a; line-height:1.2;" id="stat-rounds">—</p>
+        </div>
+      </div>
+      <div class="card p-5 flex items-center gap-4">
+        <div class="stat-icon" style="background:#eff6ff;">🫁</div>
+        <div>
+          <p style="font-size:0.72rem; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">COVID-19</p>
+          <p style="font-size:1.6rem; font-weight:700; color:#1d4ed8; line-height:1.2;" id="stat-covid">—</p>
+        </div>
+      </div>
+      <div class="card p-5 flex items-center gap-4">
+        <div class="stat-icon" style="background:#f0fdf4;">🔬</div>
+        <div>
+          <p style="font-size:0.72rem; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Skin Cancer</p>
+          <p style="font-size:1.6rem; font-weight:700; color:#059669; line-height:1.2;" id="stat-skin">—</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SERVICES ─────────────────────────────────────────────────────────── -->
+    <div class="card p-6">
+      <p class="section-title">Infrastructure Services</p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
 
         <!-- IPFS -->
-        <div class="glass-dark rounded-xl p-4">
-          <div class="flex items-center justify-between mb-3">
+        <div class="card-inner p-4">
+          <div class="flex items-center justify-between mb-1">
             <div class="flex items-center gap-2">
-              <span id="dot-ipfs" class="w-2 h-2 rounded-full dot-unknown"></span>
-              <span class="text-white font-medium text-sm">IPFS Daemon</span>
+              <span id="dot-ipfs" class="w-2.5 h-2.5 rounded-full dot-unknown inline-block"></span>
+              <span style="font-weight:600; font-size:0.9rem;">IPFS Daemon</span>
             </div>
-            <span id="label-ipfs" class="text-slate-600 text-xs">Stopped</span>
+            <span id="label-ipfs" style="font-size:0.75rem; color:#64748b;">Stopped</span>
           </div>
-          <p class="text-slate-600 text-xs mb-3">Decentralised storage for model weight deltas</p>
+          <p style="font-size:0.75rem; color:#94a3b8; margin-bottom:12px;">Decentralised storage for model weight files</p>
           <div class="flex gap-2">
-            <button class="btn btn-primary flex-1 text-xs py-1.5" id="btn-start-ipfs"   onclick="svcStart('ipfs')">Start</button>
-            <button class="btn btn-danger  flex-1 text-xs py-1.5" id="btn-stop-ipfs"    onclick="svcStop('ipfs')" disabled>Stop</button>
+            <button class="btn btn-primary flex-1 text-xs py-1.5" id="btn-start-ipfs"  onclick="svcStart('ipfs')">Start</button>
+            <button class="btn btn-danger  flex-1 text-xs py-1.5" id="btn-stop-ipfs"   onclick="svcStop('ipfs')" disabled>Stop</button>
           </div>
         </div>
 
         <!-- Fabric -->
-        <div class="glass-dark rounded-xl p-4">
-          <div class="flex items-center justify-between mb-3">
+        <div class="card-inner p-4">
+          <div class="flex items-center justify-between mb-1">
             <div class="flex items-center gap-2">
-              <span id="dot-fabric" class="w-2 h-2 rounded-full dot-unknown"></span>
-              <span class="text-white font-medium text-sm">Fabric Network</span>
+              <span id="dot-fabric" class="w-2.5 h-2.5 rounded-full dot-unknown inline-block"></span>
+              <span style="font-weight:600; font-size:0.9rem;">Fabric Network</span>
             </div>
-            <span id="label-fabric" class="text-slate-600 text-xs">Stopped</span>
+            <span id="label-fabric" style="font-size:0.75rem; color:#64748b;">Stopped</span>
           </div>
-          <p class="text-slate-600 text-xs mb-3">Blockchain ledger for immutable update records</p>
+          <p style="font-size:0.75rem; color:#94a3b8; margin-bottom:12px;">Hyperledger Fabric blockchain ledger</p>
           <div class="flex gap-2">
             <button class="btn btn-primary flex-1 text-xs py-1.5" id="btn-start-fabric" onclick="svcStart('fabric')">Start</button>
             <button class="btn btn-danger  flex-1 text-xs py-1.5" id="btn-stop-fabric"  onclick="svcStop('fabric')" disabled>Stop</button>
@@ -194,93 +212,91 @@
         </div>
 
         <!-- FL Server -->
-        <div class="glass-dark rounded-xl p-4">
-          <div class="flex items-center justify-between mb-3">
+        <div class="card-inner p-4">
+          <div class="flex items-center justify-between mb-1">
             <div class="flex items-center gap-2">
-              <span id="dot-server" class="w-2 h-2 rounded-full dot-unknown"></span>
-              <span class="text-white font-medium text-sm">FL REST Server</span>
+              <span id="dot-server" class="w-2.5 h-2.5 rounded-full dot-unknown inline-block"></span>
+              <span style="font-weight:600; font-size:0.9rem;">FL REST Server</span>
             </div>
-            <span id="label-server" class="text-slate-600 text-xs">Stopped</span>
+            <span id="label-server" style="font-size:0.75rem; color:#64748b;">Stopped</span>
           </div>
-          <p class="text-slate-600 text-xs mb-3">API bridge between hospitals and blockchain</p>
-          <div class="flex gap-2">
+          <p style="font-size:0.75rem; color:#94a3b8; margin-bottom:12px;">API bridge between hospitals and blockchain</p>
+          <div class="flex gap-2 mb-2">
             <button class="btn btn-primary flex-1 text-xs py-1.5" id="btn-start-server" onclick="svcStart('server')">Start</button>
             <button class="btn btn-danger  flex-1 text-xs py-1.5" id="btn-stop-server"  onclick="svcStop('server')" disabled>Stop</button>
           </div>
-          <div class="mt-2">
-            <button class="btn btn-outline w-full text-xs py-1.5" onclick="setupWallet()" title="Run enrollAdmin + registerUser after Fabric is running">Setup Wallet (enroll users)</button>
+          <div class="flex gap-2 mb-2">
+            <button class="btn btn-outline flex-1 text-xs py-1.5" onclick="enrollAdmin()">Enroll Admin</button>
+            <button class="btn btn-outline flex-1 text-xs py-1.5" onclick="registerUser()">Register User</button>
+          </div>
+          <div id="wallet-status" class="flex items-center gap-3 pt-1" style="font-size:0.75rem; color:#64748b;">
+            <span style="font-weight:600;">Wallet:</span>
+            <span id="ws-admin"   class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full w-dot-off inline-block"></span>admin</span>
+            <span id="ws-appuser" class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full w-dot-off inline-block"></span>appUser</span>
+            <button onclick="refreshWalletStatus()" style="margin-left:auto; color:#94a3b8;" class="hover:text-blue-600 text-xs">↺ refresh</button>
           </div>
         </div>
       </div>
 
       <!-- Log tabs -->
       <div>
-        <div class="flex gap-1 mb-2">
-          <button class="btn btn-outline text-xs py-1 px-3" id="tab-ipfs"   onclick="showLog('ipfs')"  >IPFS</button>
-          <button class="btn btn-outline text-xs py-1 px-3" id="tab-fabric" onclick="showLog('fabric')">Fabric</button>
-          <button class="btn btn-outline text-xs py-1 px-3" id="tab-server" onclick="showLog('server')">FL Server</button>
+        <div class="flex gap-1.5 mb-2">
+          <button class="btn btn-outline text-xs py-1 px-3" id="tab-ipfs"   onclick="showLog('ipfs')">IPFS Logs</button>
+          <button class="btn btn-outline text-xs py-1 px-3" id="tab-fabric" onclick="showLog('fabric')">Fabric Logs</button>
+          <button class="btn btn-outline text-xs py-1 px-3" id="tab-server" onclick="showLog('server')">FL Server Logs</button>
         </div>
-        <div class="terminal" id="svc-log">Select a service tab to see logs.</div>
+        <div class="terminal" id="svc-log">Select a tab to view live logs.</div>
       </div>
     </div>
 
-    <!-- ── STATS BAR ─────────────────────────────────────────────────────────── -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="glass rounded-2xl p-5">
-        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Total Updates</p>
-        <p class="text-3xl font-bold text-white" id="stat-total">—</p>
-        <p class="text-slate-600 text-xs mt-1">all hospitals</p>
-      </div>
-      <div class="glass rounded-2xl p-5">
-        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">FL Rounds</p>
-        <p class="text-3xl font-bold text-white" id="stat-rounds">—</p>
-        <p class="text-slate-600 text-xs mt-1">active rounds</p>
-      </div>
-      <div class="glass rounded-2xl p-5">
-        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">COVID-19</p>
-        <p class="text-3xl font-bold text-blue-400" id="stat-covid">—</p>
-        <p class="text-slate-600 text-xs mt-1">updates submitted</p>
-      </div>
-      <div class="glass rounded-2xl p-5">
-        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Skin Cancer</p>
-        <p class="text-3xl font-bold text-emerald-400" id="stat-skin">—</p>
-        <p class="text-slate-600 text-xs mt-1">updates submitted</p>
-      </div>
-    </div>
-
-    <!-- ── HOSPITAL SIMULATOR ─────────────────────────────────────────────────── -->
-    <div class="glass rounded-2xl p-6">
-      <div class="flex items-center justify-between mb-6">
+    <!-- ── HOSPITAL SIMULATOR ────────────────────────────────────────────────── -->
+    <div class="card p-6">
+      <div class="flex items-start justify-between mb-5">
         <div>
-          <h2 class="text-white font-semibold text-lg">Simulate Hospital Training</h2>
-          <p class="text-slate-500 text-sm mt-0.5">Run a federated learning round as a hospital — no terminal needed</p>
+          <p class="section-title" style="margin-bottom:4px;">Hospital Training Simulator</p>
+          <p style="font-size:0.85rem; color:#64748b;">Simulate a hospital submitting a federated learning update — no terminal required</p>
         </div>
         <span id="sim-status-badge" class="pill badge-none hidden"></span>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-5">
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-5">
         <div class="lg:col-span-2">
           <label>Hospital Name</label>
           <input id="sim-sender" type="text" placeholder="e.g. Hospital1" value="Hospital1" />
         </div>
         <div>
-          <label>Model</label>
+          <label>Model Type</label>
           <select id="sim-model">
             <option value="covid">COVID-19</option>
             <option value="skin">Skin Cancer</option>
           </select>
         </div>
         <div>
-          <label>Round</label>
+          <label>Round No.</label>
           <input id="sim-round" type="number" value="1" min="1" />
+        </div>
+        <div>
+          <label>Algorithm</label>
+          <select id="sim-algo">
+            <option value="fedprox">FedProx</option>
+            <option value="fedavg">FedAvg</option>
+          </select>
+        </div>
+        <div>
+          <label>μ (FedProx)</label>
+          <input id="sim-mu" type="number" value="0.01" step="0.001" min="0.001" />
         </div>
         <div>
           <label>DP Clip</label>
           <input id="sim-clip" type="number" value="1.0" step="0.1" min="0.1" />
         </div>
         <div>
-          <label>DP Noise</label>
+          <label>DP Noise σ</label>
           <input id="sim-noise" type="number" value="0.1" step="0.01" min="0" />
+        </div>
+        <div>
+          <label>Samples</label>
+          <input id="sim-samples" type="number" value="64" step="32" min="16" max="512" />
         </div>
       </div>
 
@@ -299,40 +315,112 @@
         </div>
       </div>
 
-      <!-- Terminal output -->
       <div id="sim-log-wrap" class="mt-4 hidden">
-        <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Output</p>
+        <p style="font-size:0.72rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Simulator Output</p>
         <div class="terminal" id="sim-log"></div>
       </div>
     </div>
 
-    <!-- ── MODEL PANELS ───────────────────────────────────────────────────────── -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div id="panel-covid" class="glass rounded-2xl p-6 glow-blue"></div>
-      <div id="panel-skin"  class="glass rounded-2xl p-6 glow-green"></div>
+    <!-- ── MODEL PANELS ──────────────────────────────────────────────────────── -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div id="panel-covid" class="card p-6"></div>
+      <div id="panel-skin"  class="card p-6"></div>
     </div>
 
-    <!-- ── ACTIVITY FEED + TABLE ─────────────────────────────────────────────── -->
-    <div class="glass rounded-2xl p-6">
-      <div class="flex items-center justify-between mb-5">
-        <h2 class="text-white font-semibold text-lg">All Hospital Updates</h2>
-        <span class="text-slate-500 text-xs" id="table-count"></span>
+    <!-- ── RESEARCH RESULTS ──────────────────────────────────────────────────── -->
+    <div class="card p-6">
+      <p class="section-title" style="margin-bottom:4px;">Research Results</p>
+      <p style="font-size:0.83rem; color:#64748b; margin-bottom:20px;">
+        Convergence analysis, privacy budget, and algorithm comparison across FL rounds
+      </p>
+
+      <!-- Algorithm comparison cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="algo-summary">
+        <div class="card-inner p-4 text-center">
+          <p style="font-size:0.7rem;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.05em;">FedProx  COVID</p>
+          <p style="font-size:1.6rem;font-weight:700;color:#0f172a;" id="res-fedprox-covid">—</p>
+          <p style="font-size:0.72rem;color:#64748b;">best accuracy</p>
+        </div>
+        <div class="card-inner p-4 text-center">
+          <p style="font-size:0.7rem;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:0.05em;">FedProx  Skin</p>
+          <p style="font-size:1.6rem;font-weight:700;color:#0f172a;" id="res-fedprox-skin">—</p>
+          <p style="font-size:0.72rem;color:#64748b;">best accuracy</p>
+        </div>
+        <div class="card-inner p-4 text-center">
+          <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">FedAvg  COVID</p>
+          <p style="font-size:1.6rem;font-weight:700;color:#0f172a;" id="res-fedavg-covid">—</p>
+          <p style="font-size:0.72rem;color:#64748b;">best accuracy</p>
+        </div>
+        <div class="card-inner p-4 text-center">
+          <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">FedAvg  Skin</p>
+          <p style="font-size:1.6rem;font-weight:700;color:#0f172a;" id="res-fedavg-skin">—</p>
+          <p style="font-size:0.72rem;color:#64748b;">best accuracy</p>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="card-inner p-4">
+          <p style="font-size:0.78rem;font-weight:600;color:#374151;margin-bottom:12px;">
+            Convergence — Accuracy vs FL Rounds
+          </p>
+          <canvas id="chart-convergence" height="220"></canvas>
+        </div>
+        <div class="card-inner p-4">
+          <p style="font-size:0.78rem;font-weight:600;color:#374151;margin-bottom:12px;">
+            Privacy Budget — ε per Round (Gaussian Mechanism, δ=1e-5)
+          </p>
+          <canvas id="chart-privacy" height="220"></canvas>
+        </div>
+      </div>
+
+      <!-- Metrics table -->
+      <div>
+        <p style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Per-Round Metrics</p>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="tbl-head">
+              <tr>
+                <th class="text-left">Round</th>
+                <th class="text-left">Model</th>
+                <th class="text-left">Algorithm</th>
+                <th class="text-left">μ</th>
+                <th class="text-left">Accuracy</th>
+                <th class="text-left">Privacy ε</th>
+                <th class="text-left">Clients</th>
+                <th class="text-left">Time</th>
+              </tr>
+            </thead>
+            <tbody id="metrics-table"></tbody>
+          </table>
+          <p id="no-metrics" class="text-center py-8" style="color:#94a3b8;font-size:0.875rem;">
+            No results yet. Submit hospital updates to trigger aggregation.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── UPDATES TABLE ─────────────────────────────────────────────────────── -->
+    <div class="card p-6">
+      <div class="flex items-center justify-between mb-4">
+        <p class="section-title" style="margin-bottom:0;">All Hospital Updates</p>
+        <span style="font-size:0.78rem; color:#94a3b8;" id="table-count"></span>
       </div>
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-slate-500 text-xs uppercase border-b sep">
-              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">Hospital</th>
-              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">Model</th>
-              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">Round</th>
-              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">IPFS CID</th>
-              <th class="text-left pb-3 pr-4 font-semibold tracking-wider">DP Clip</th>
-              <th class="text-left pb-3 font-semibold tracking-wider">Time</th>
+        <table class="w-full">
+          <thead class="tbl-head">
+            <tr>
+              <th class="text-left">Hospital</th>
+              <th class="text-left">Model</th>
+              <th class="text-left">Round</th>
+              <th class="text-left">IPFS CID</th>
+              <th class="text-left">DP Clip</th>
+              <th class="text-left">Time</th>
             </tr>
           </thead>
           <tbody id="updates-table"></tbody>
         </table>
-        <p id="no-updates" class="text-slate-600 text-sm text-center py-10 hidden">
+        <p id="no-updates" class="text-center py-10 hidden" style="color:#94a3b8; font-size:0.875rem;">
           No hospital updates yet. Use the simulator above to submit one.
         </p>
       </div>
@@ -386,6 +474,9 @@
       const round     = parseInt(document.getElementById('sim-round').value);
       const clip      = parseFloat(document.getElementById('sim-clip').value);
       const noise     = parseFloat(document.getElementById('sim-noise').value);
+      const algo      = document.getElementById('sim-algo').value;
+      const mu        = parseFloat(document.getElementById('sim-mu').value);
+      const samples   = parseInt(document.getElementById('sim-samples').value) || 64;
 
       if (!sender) { alert('Please enter a hospital name.'); return; }
 
@@ -398,7 +489,8 @@
       btnA.disabled = true;
       btnB.disabled = true;
       logWrap.classList.remove('hidden');
-      logEl.innerHTML = `<span class="log-info">Starting ${sender} · ${modelType.toUpperCase()} · Round ${round}${pullGlobal ? ' · pulling global model' : ''}…</span>\n`;
+      const algoLabel = algo === 'fedprox' ? `FedProx μ=${mu}` : 'FedAvg';
+      logEl.innerHTML = `<span class="log-info">Starting ${sender} · ${modelType.toUpperCase()} · Round ${round} · ${algoLabel}${pullGlobal ? ' · pulling global' : ''}…</span>\n`;
       badge.className = 'pill badge-aggregating';
       badge.textContent = '↻ Running';
       badge.classList.remove('hidden');
@@ -407,24 +499,22 @@
         const res = await fetchJSON('/api/simulate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sender, modelType, round, clip, noise, pullGlobal }),
+          body: JSON.stringify({ sender, modelType, round, clip, noise, pullGlobal, algo, mu, samples }),
         });
 
         const lines = (res.output || res.error || 'No output').split('\n');
         logEl.innerHTML = lines.map(l => {
           if (!l.trim()) return '';
           if (l.includes('ERROR') || l.includes('Error') || l.includes('error')) return `<span class="log-error">${l}</span>`;
-          if (l.includes('CID') || l.includes('complete') || l.includes('OK')) return `<span class="log-success">${l}</span>`;
+          if (l.includes('CID') || l.includes('complete') || l.includes('OK') || l.includes('accuracy')) return `<span class="log-success">${l}</span>`;
           if (l.startsWith('  ') || l.includes('[')) return `<span class="log-info">${l}</span>`;
           return `<span>${l}</span>`;
         }).filter(Boolean).join('\n');
 
         logEl.scrollTop = logEl.scrollHeight;
-
         badge.className  = `pill ${res.success ? 'badge-done' : 'badge-waiting'}`;
         badge.textContent = res.success ? '✓ Done' : '✗ Failed';
-
-        if (res.success) refresh();
+        if (res.success) { refresh(); refreshMetrics(); }
 
       } catch (err) {
         logEl.innerHTML += `<span class="log-error">Request failed: ${err.message}</span>`;
@@ -436,14 +526,34 @@
       btnB.disabled = false;
     }
 
-    async function setupWallet() {
-      const logEl = document.getElementById('server-log') || document.querySelector('[id^=log-]');
+    async function refreshWalletStatus() {
+      try {
+        const s = await fetchJSON('/launcher/server/wallet-status');
+        const dot = ok => `<span class="w-2 h-2 rounded-full inline-block ${ok ? 'w-dot-on' : 'w-dot-off'}"></span>`;
+        document.getElementById('ws-admin').innerHTML   = dot(s.admin)   + ' admin';
+        document.getElementById('ws-appuser').innerHTML = dot(s.appUser) + ' appUser';
+      } catch(_) {}
+    }
+
+    async function enrollAdmin() {
       showLog('server');
       try {
-        const r = await fetchJSON('/launcher/server/setup-wallet', { method: 'POST' });
-        alert(r.ok ? 'Wallet ready — admin + appUser enrolled!' : 'Error: ' + r.error);
+        const r = await fetchJSON('/launcher/server/enroll-admin', { method: 'POST' });
+        await refreshWalletStatus();
+        if (!r.ok) alert('Error: ' + r.error);
       } catch(e) {
-        alert('Setup wallet failed: ' + e.message);
+        alert('Enroll admin failed: ' + e.message);
+      }
+    }
+
+    async function registerUser() {
+      showLog('server');
+      try {
+        const r = await fetchJSON('/launcher/server/register-user', { method: 'POST' });
+        await refreshWalletStatus();
+        if (!r.ok) alert('Error: ' + r.error);
+      } catch(e) {
+        alert('Register user failed: ' + e.message);
       }
     }
 
@@ -455,8 +565,8 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ round, modelType }),
         });
-        const logEl = document.getElementById('sim-log');
         document.getElementById('sim-log-wrap').classList.remove('hidden');
+        const logEl = document.getElementById('sim-log');
         logEl.innerHTML += `<span class="log-info">\nManual FedAvg triggered: ${r.message}</span>\n`;
         logEl.scrollTop = logEl.scrollHeight;
       } catch(e) {
@@ -468,9 +578,10 @@
 
     function renderModelPanel(el, modelType, allUpdates, globalModel) {
       const isCovid   = modelType === 'covid';
-      const label     = isCovid ? 'COVID-19' : 'Skin Cancer';
-      const color     = isCovid ? 'blue' : 'emerald';
-      const accent    = isCovid ? '#3b82f6' : '#10b981';
+      const label     = isCovid ? 'COVID-19 Model' : 'Skin Cancer Model';
+      const accent    = isCovid ? '#1d4ed8' : '#059669';
+      const accentBg  = isCovid ? '#eff6ff' : '#f0fdf4';
+      const barClr    = isCovid ? '#1d4ed8' : '#059669';
       const updates   = allUpdates.filter(u => u.modelType === modelType);
 
       const byRound = {};
@@ -489,8 +600,7 @@
         else                                                 aggStatus = 'waiting';
       }
 
-      const pct    = latestRnd ? Math.min(100, (latestCnt / MIN_CLIENTS) * 100) : 0;
-      const barClr = isCovid ? 'bg-blue-500' : 'bg-emerald-500';
+      const pct = latestRnd ? Math.min(100, (latestCnt / MIN_CLIENTS) * 100) : 0;
 
       const roundRows = rounds.slice(0, 5).map(r => {
         const clients  = byRound[r];
@@ -498,65 +608,69 @@
         return `
           <div class="py-3 border-b sep last:border-0">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-slate-200 font-semibold text-sm">Round ${r}</span>
+              <span style="font-weight:600; font-size:0.85rem;">Round ${r}</span>
               <div class="flex items-center gap-2">
-                ${isGlobal ? `<span class="pill badge-done text-xs">Aggregated</span>` : `<span class="text-slate-500 text-xs">${clients.length}/${MIN_CLIENTS} submitted</span>`}
+                ${isGlobal
+                  ? `<span class="pill badge-done">Aggregated</span>`
+                  : `<span style="font-size:0.75rem; color:#64748b;">${clients.length}/${MIN_CLIENTS} submitted</span>`}
               </div>
             </div>
-            <div class="space-y-1.5 mb-2">
+            <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:6px;">
               ${clients.map(c => `
                 <div class="flex items-center gap-2">
-                  <span class="text-${color}-400 font-medium text-xs w-24 truncate">${c.sender}</span>
+                  <span style="color:${accent}; font-weight:600; font-size:0.78rem; width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${c.sender}</span>
                   <span class="cid flex-1 truncate" title="${c.ipfsCID}">${shortCID(c.ipfsCID)}</span>
-                  <span class="text-slate-600 text-xs">${fmtTime(c.timestamp)}</span>
+                  <span style="font-size:0.72rem; color:#94a3b8;">${fmtTime(c.timestamp)}</span>
                 </div>`).join('')}
             </div>
             ${isGlobal ? `
-              <div class="p-2.5 rounded-xl glass-dark mt-1">
-                <p class="text-xs text-${color}-400 font-semibold mb-1">Global Model</p>
+              <div class="card-inner p-3 mt-1">
+                <p style="font-size:0.72rem; font-weight:700; color:${accent}; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Global Model CID</p>
                 <p class="cid truncate" title="${globalModel.ipfsCID}">${globalModel.ipfsCID}</p>
-                <p class="text-slate-600 text-xs mt-1">${globalModel.clientCount} hospitals merged · ${fmtTime(globalModel.timestamp)}</p>
+                <p style="font-size:0.72rem; color:#94a3b8; margin-top:4px;">${globalModel.clientCount} hospitals · ${fmtTime(globalModel.timestamp)}</p>
               </div>` : ''}
           </div>`;
       }).join('');
 
       el.innerHTML = `
-        <div class="flex items-center justify-between mb-5">
+        <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
-                 style="background:linear-gradient(135deg,${accent}33,${accent}11);color:${accent};border:1px solid ${accent}33">
+            <div style="width:36px;height:36px;border-radius:10px;background:${accentBg};display:flex;align-items:center;justify-content:center;font-size:1.1rem;">
               ${isCovid ? '🫁' : '🔬'}
             </div>
-            <h2 class="text-white font-semibold text-base">${label}</h2>
+            <div>
+              <h3 style="font-weight:700; font-size:0.95rem;">${label}</h3>
+              <p style="font-size:0.72rem; color:#64748b;">${updates.length} update${updates.length !== 1 ? 's' : ''} recorded</p>
+            </div>
           </div>
           ${badge(aggStatus)}
         </div>
 
-        <div class="mb-5">
-          <div class="flex justify-between text-xs mb-1.5">
-            <span class="text-slate-500">Round ${latestRnd ?? '—'}</span>
-            <span class="text-slate-400 font-medium">${latestCnt} / ${MIN_CLIENTS} hospitals</span>
+        <div class="mb-4">
+          <div class="flex justify-between mb-1" style="font-size:0.78rem;">
+            <span style="color:#64748b;">Round ${latestRnd ?? '—'} progress</span>
+            <span style="color:#374151; font-weight:600;">${latestCnt} / ${MIN_CLIENTS} hospitals</span>
           </div>
           <div class="progress-track">
-            <div class="progress-fill ${barClr}" style="width:${pct}%"></div>
+            <div class="progress-fill" style="width:${pct}%; background:${barClr};"></div>
           </div>
         </div>
 
-        <div class="glass-dark rounded-xl p-3 mb-5">
-          <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Latest Global Model</p>
+        <div class="card-inner p-3 mb-4">
+          <p style="font-size:0.72rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Latest Global Model</p>
           ${globalModel
             ? `<p class="cid truncate" title="${globalModel.ipfsCID}">${globalModel.ipfsCID}</p>
-               <p class="text-slate-600 text-xs mt-1.5">Round ${globalModel.round} · ${globalModel.clientCount} clients · ${fmtTime(globalModel.timestamp)}</p>`
-            : `<p class="text-slate-600 text-sm">Not yet aggregated</p>`}
+               <p style="font-size:0.72rem; color:#94a3b8; margin-top:4px;">Round ${globalModel.round} · ${globalModel.clientCount} clients · ${fmtTime(globalModel.timestamp)}</p>`
+            : `<p style="color:#94a3b8; font-size:0.85rem;">Not yet aggregated</p>`}
         </div>
 
         <div>
-          <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Round History</p>
+          <p style="font-size:0.72rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;">Round History</p>
           ${rounds.length
             ? roundRows
-            : `<div class="text-center py-6">
-                 <p class="text-slate-600 text-sm">No updates yet</p>
-                 <p class="text-slate-700 text-xs mt-1">Use the simulator above to submit</p>
+            : `<div style="text-align:center; padding:24px 0;">
+                 <p style="color:#94a3b8; font-size:0.875rem;">No updates yet</p>
+                 <p style="color:#cbd5e1; font-size:0.78rem; margin-top:4px;">Use the simulator above to get started</p>
                </div>`}
         </div>`;
     }
@@ -578,20 +692,20 @@
       }
       noEl.classList.add('hidden');
 
-      tbody.innerHTML = sorted.map((u, i) => `
-        <tr class="${i % 2 === 0 ? 'tr-even' : 'tr-odd'} cursor-default">
-          <td class="py-2.5 pr-4 font-semibold text-white text-sm">${u.sender}</td>
-          <td class="py-2.5 pr-4">
+      tbody.innerHTML = sorted.map(u => `
+        <tr class="tbl-row">
+          <td style="font-weight:600; color:#0f172a;">${u.sender}</td>
+          <td>
             <span class="pill ${u.modelType === 'covid' ? 'badge-waiting' : 'badge-done'}">
               ${u.modelType === 'covid' ? '🫁 COVID' : '🔬 Skin'}
             </span>
           </td>
-          <td class="py-2.5 pr-4 text-slate-300 font-medium">${u.round}</td>
-          <td class="py-2.5 pr-4 max-w-[160px]">
+          <td style="font-weight:500;">Round ${u.round}</td>
+          <td style="max-width:160px;">
             <span class="cid truncate block" title="${u.ipfsCID}">${shortCID(u.ipfsCID)}</span>
           </td>
-          <td class="py-2.5 pr-4 text-slate-400 text-sm">${u.clipValue ?? '—'}</td>
-          <td class="py-2.5 text-slate-500 text-sm">${fmtTime(u.timestamp)}</td>
+          <td style="color:#64748b;">${u.clipValue ?? '—'}</td>
+          <td style="color:#94a3b8;">${fmtTime(u.timestamp)}</td>
         </tr>`).join('');
     }
 
@@ -610,7 +724,7 @@
     // ── Server status ────────────────────────────────────────────────────────────
 
     function setStatus(ok) {
-      document.getElementById('status-dot').className  = `w-2 h-2 rounded-full ${ok ? 'dot-online' : 'dot-offline'}`;
+      document.getElementById('status-dot').className  = `w-2.5 h-2.5 rounded-full inline-block ${ok ? 'dot-online' : 'dot-offline'}`;
       document.getElementById('status-text').textContent = ok ? 'Server online' : 'Server unreachable';
     }
 
@@ -640,7 +754,6 @@
 
     // ── Services control ──────────────────────────────────────────────────────
 
-    const svcColors = { ipfs: 'dot-online', fabric: 'dot-online', server: 'dot-online' };
     let activeLogTab = null;
     const logBuffers = { ipfs: '', fabric: '', server: '' };
 
@@ -662,7 +775,7 @@
     }
 
     function subscribeLog(svc) {
-      if (window[`_sse_${svc}`]) return; // already subscribed
+      if (window[`_sse_${svc}`]) return;
       const es = new EventSource(`/launcher/${svc}/logs`);
       window[`_sse_${svc}`] = es;
       es.onmessage = e => {
@@ -695,30 +808,160 @@
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
-    // Poll service status
     async function pollServices() {
       try {
         const s = await fetch('/launcher/status').then(r => r.json());
         ['ipfs','fabric','server'].forEach(svc => {
-          const running = s[svc];
-          const dot   = document.getElementById(`dot-${svc}`);
-          const label = document.getElementById(`label-${svc}`);
+          const running  = s[svc];
+          const dot      = document.getElementById(`dot-${svc}`);
+          const label    = document.getElementById(`label-${svc}`);
           const btnStart = document.getElementById(`btn-start-${svc}`);
           const btnStop  = document.getElementById(`btn-stop-${svc}`);
-          dot.className   = `w-2 h-2 rounded-full ${running ? 'dot-online' : 'dot-offline'}`;
+          dot.className     = `w-2.5 h-2.5 rounded-full inline-block ${running ? 'dot-online' : 'dot-offline'}`;
           label.textContent = running ? 'Running' : 'Stopped';
-          label.className   = `text-xs font-medium ${running ? 'text-emerald-400' : 'text-slate-500'}`;
+          label.style.color = running ? '#059669' : '#94a3b8';
+          label.style.fontWeight = running ? '600' : '400';
           btnStart.disabled = running;
           btnStop.disabled  = !running;
           if (running) subscribeLog(svc);
         });
-      } catch {
-        // launcher not available — hide services panel gracefully
-      }
+      } catch { /* launcher not available */ }
     }
 
     pollServices();
     setInterval(pollServices, 3000);
+    refreshWalletStatus();
+    setInterval(refreshWalletStatus, 5000);
+
+    // ── Research Results ──────────────────────────────────────────────────────
+
+    let _convChart = null;
+    let _privChart = null;
+
+    const CHART_COLORS = {
+      'fedprox-covid': { border: '#1d4ed8', bg: 'rgba(29,78,216,0.08)', dash: [] },
+      'fedprox-skin':  { border: '#059669', bg: 'rgba(5,150,105,0.08)',  dash: [] },
+      'fedavg-covid':  { border: '#93c5fd', bg: 'rgba(147,197,253,0.05)', dash: [6,3] },
+      'fedavg-skin':   { border: '#6ee7b7', bg: 'rgba(110,231,183,0.05)', dash: [6,3] },
+    };
+
+    function buildChartDatasets(metrics, valueKey) {
+      const groups = {};
+      metrics.forEach(m => {
+        const key = `${m.algorithm}-${m.modelType}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push({ x: m.round, y: valueKey === 'accuracy' ? +(m.accuracy * 100).toFixed(2) : +m.epsilon.toFixed(4) });
+      });
+      return Object.entries(groups).map(([key, points]) => {
+        const c = CHART_COLORS[key] || { border: '#94a3b8', bg: 'rgba(148,163,184,0.05)', dash: [4,2] };
+        const [algo, model] = key.split('-');
+        return {
+          label:           `${algo.toUpperCase()} · ${model === 'covid' ? 'COVID-19' : 'Skin Cancer'}`,
+          data:            points.sort((a,b) => a.x - b.x),
+          borderColor:     c.border,
+          backgroundColor: c.bg,
+          borderDash:      c.dash,
+          borderWidth:     2,
+          pointRadius:     4,
+          pointHoverRadius: 6,
+          tension:         0.35,
+          fill:            true,
+        };
+      });
+    }
+
+    function renderCharts(metrics) {
+      const convCtx = document.getElementById('chart-convergence').getContext('2d');
+      const privCtx = document.getElementById('chart-privacy').getContext('2d');
+
+      const commonOpts = {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12, boxWidth: 18 } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}` } },
+        },
+        scales: {
+          x: { type: 'linear', title: { display: true, text: 'FL Round', font: { size: 11 } },
+               ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+          y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } },
+        },
+      };
+
+      // Convergence chart
+      const convDatasets = buildChartDatasets(metrics, 'accuracy');
+      if (_convChart) _convChart.destroy();
+      _convChart = new Chart(convCtx, {
+        type: 'line',
+        data: { datasets: convDatasets },
+        options: { ...commonOpts,
+          scales: { ...commonOpts.scales,
+            y: { ...commonOpts.scales.y, title: { display: true, text: 'Accuracy (%)', font: { size: 11 } }, min: 50, max: 100 },
+          },
+        },
+      });
+
+      // Privacy chart
+      const privDatasets = buildChartDatasets(metrics, 'epsilon');
+      if (_privChart) _privChart.destroy();
+      _privChart = new Chart(privCtx, {
+        type: 'line',
+        data: { datasets: privDatasets },
+        options: { ...commonOpts,
+          scales: { ...commonOpts.scales,
+            y: { ...commonOpts.scales.y, title: { display: true, text: 'Privacy ε (per round)', font: { size: 11 } } },
+          },
+        },
+      });
+    }
+
+    function renderMetricsTable(metrics) {
+      const tbody  = document.getElementById('metrics-table');
+      const noEl   = document.getElementById('no-metrics');
+      const sorted = [...metrics].sort((a,b) => b.round - a.round || b.timestamp.localeCompare(a.timestamp));
+
+      if (!sorted.length) { tbody.innerHTML = ''; noEl.classList.remove('hidden'); return; }
+      noEl.classList.add('hidden');
+
+      tbody.innerHTML = sorted.map(m => `
+        <tr class="tbl-row">
+          <td style="font-weight:600;">Round ${m.round}</td>
+          <td><span class="pill ${m.modelType === 'covid' ? 'badge-waiting' : 'badge-done'}">
+            ${m.modelType === 'covid' ? '🫁 COVID' : '🔬 Skin'}</span></td>
+          <td><span style="font-weight:600;color:${m.algorithm==='fedprox'?'#1d4ed8':'#64748b'}">
+            ${m.algorithm.toUpperCase()}</span></td>
+          <td style="color:#64748b;">${m.algorithm === 'fedprox' ? m.mu : '—'}</td>
+          <td style="font-weight:700;color:${m.accuracy>=0.85?'#059669':m.accuracy>=0.70?'#d97706':'#dc2626'}">
+            ${(m.accuracy*100).toFixed(2)}%</td>
+          <td style="color:#64748b;">${m.epsilon ? m.epsilon.toFixed(4) : '—'}</td>
+          <td style="color:#64748b;">${m.clientCount}</td>
+          <td style="color:#94a3b8;">${new Date(m.timestamp).toLocaleTimeString()}</td>
+        </tr>`).join('');
+    }
+
+    function renderAlgoSummary(metrics) {
+      const best = (algo, model) => {
+        const rows = metrics.filter(m => m.algorithm === algo && m.modelType === model);
+        if (!rows.length) return '—';
+        return (Math.max(...rows.map(r => r.accuracy)) * 100).toFixed(1) + '%';
+      };
+      document.getElementById('res-fedprox-covid').textContent = best('fedprox', 'covid');
+      document.getElementById('res-fedprox-skin').textContent  = best('fedprox', 'skin');
+      document.getElementById('res-fedavg-covid').textContent  = best('fedavg',  'covid');
+      document.getElementById('res-fedavg-skin').textContent   = best('fedavg',  'skin');
+    }
+
+    async function refreshMetrics() {
+      try {
+        const { metrics } = await fetchJSON('/api/metrics');
+        renderAlgoSummary(metrics);
+        renderCharts(metrics);
+        renderMetricsTable(metrics);
+      } catch(_) {}
+    }
+
+    refreshMetrics();
+    setInterval(refreshMetrics, 6000);
   </script>
 </body>
 </html>

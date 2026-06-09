@@ -26,6 +26,9 @@ class ModelRegistry extends Contract {
             throw new Error(`Update '${updateId}' already exists on the ledger`);
         }
 
+        const txTs = ctx.stub.getTxTimestamp();
+        const timestamp = new Date(Number(txTs.seconds) * 1000).toISOString();
+
         const record = {
             docType:    'modelUpdate',
             updateId,
@@ -33,7 +36,7 @@ class ModelRegistry extends Contract {
             modelType,
             round:      parseInt(round, 10),
             ipfsCID,
-            timestamp:  new Date().toISOString(),
+            timestamp,
             clipValue:  parseFloat(clipValue),
             noiseScale: parseFloat(noiseScale),
         };
@@ -119,13 +122,16 @@ class ModelRegistry extends Contract {
     async storeGlobalModel(ctx, round, modelType, ipfsCID, clientCount) {
         const roundInt = parseInt(round, 10);
 
+        const txTs = ctx.stub.getTxTimestamp();
+        const timestamp = new Date(Number(txTs.seconds) * 1000).toISOString();
+
         const record = {
             docType:     'globalModel',
             round:       roundInt,
             modelType,
             ipfsCID,
             clientCount: parseInt(clientCount, 10),
-            timestamp:   new Date().toISOString(),
+            timestamp,
         };
 
         const perRoundKey = `globalModel_${modelType}_round${roundInt}`;

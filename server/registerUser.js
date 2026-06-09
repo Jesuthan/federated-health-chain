@@ -8,8 +8,9 @@ const path = require('path');
 async function main() {
     try {
         const HOME = process.env.HOME || process.env.USERPROFILE;
-        const ccpBase = fs.existsSync('C:\\fabric-samples\\test-network')
-            ? 'C:\\fabric-samples'
+        const wslBase = '\\\\wsl$\\Ubuntu\\home\\smart_touch_pc\\fabric-samples';
+        const ccpBase = fs.existsSync(path.join(wslBase, 'test-network')) ? wslBase
+            : fs.existsSync('C:\\fabric-samples\\test-network') ? 'C:\\fabric-samples'
             : path.join(HOME, 'fabric-samples');
         const ccpPath = path.join(
             ccpBase, 'test-network', 'organizations',
@@ -36,11 +37,11 @@ async function main() {
         const wallet = await Wallets.newFileSystemWallet(walletPath);
         console.log(`Wallet path: ${walletPath}`);
 
-        // Check if appUser already registered
+        // Always re-enroll appUser — the CA issues fresh crypto on every network restart,
+        // so any wallet entry from a previous run is stale and causes "access denied".
         const userIdentity = await wallet.get('appUser');
         if (userIdentity) {
-            console.log('appUser identity already exists in wallet. Skipping registration.');
-            return;
+            console.log('appUser identity already in wallet — re-enrolling to match current CA.');
         }
 
         // Admin must exist first
@@ -54,20 +55,34 @@ async function main() {
         const provider = wallet.getProviderRegistry().getProvider(adminIdentity.type);
         const adminUser = await provider.getUserContext(adminIdentity, 'admin');
 
-        // Register the user
-        const secret = await ca.register(
-            {
-                affiliation: 'org1.department1',
-                enrollmentID: 'appUser',
-                role: 'client',
-            },
-            adminUser
-        );
+        // Persist the secret alongside the wallet so re-enrollment works after wallet clear
+        const secretFile = path.join(walletPath, '.appuser-secret');
+
+        let enrollSecret;
+        try {
+            enrollSecret = await ca.register(
+                { affiliation: 'org1.department1', enrollmentID: 'appUser', role: 'client', maxEnrollments: -1 },
+                adminUser
+            );
+            fs.writeFileSync(secretFile, enrollSecret, 'utf8');
+        } catch (regErr) {
+            if (!regErr.message.includes('74')) throw regErr;
+            // Already registered — use the saved secret from the last registration
+            if (fs.existsSync(secretFile)) {
+                enrollSecret = fs.readFileSync(secretFile, 'utf8').trim();
+                console.log('appUser already registered — using saved secret to re-enroll.');
+            } else {
+                throw new Error(
+                    'appUser is registered in the CA but the secret file is missing.\n' +
+                    'Restart the Fabric network (Stop → Start in dashboard) to reset the CA, then try again.'
+                );
+            }
+        }
 
         // Enroll the user
         const enrollment = await ca.enroll({
             enrollmentID: 'appUser',
-            enrollmentSecret: secret,
+            enrollmentSecret: enrollSecret,
         });
 
         const x509Identity = {

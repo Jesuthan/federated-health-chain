@@ -7,6 +7,19 @@ const { spawn }            = require('child_process');
 const fs   = require('fs');
 const path = require('path');
 
+// ─── Metrics store (persisted to metrics.json) ─────────────────────────────────
+const METRICS_FILE = path.join(__dirname, 'metrics.json');
+let _metrics = [];
+try {
+    if (fs.existsSync(METRICS_FILE)) {
+        _metrics = JSON.parse(fs.readFileSync(METRICS_FILE, 'utf8'));
+    }
+} catch (_) { _metrics = []; }
+
+function saveMetrics() {
+    try { fs.writeFileSync(METRICS_FILE, JSON.stringify(_metrics, null, 2)); } catch (_) {}
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -19,9 +32,17 @@ const CHAINCODE_NAME = 'modelregistry';
 const MIN_CLIENTS = parseInt(process.env.MIN_CLIENTS || '2', 10);
 
 const HOME    = process.env.HOME || process.env.USERPROFILE;
-const ccpBase = fs.existsSync('C:\\fabric-samples\\test-network')
-    ? 'C:\\fabric-samples'
-    : path.join(HOME, 'fabric-samples');
+
+// Fabric network runs via WSL2 — certs are in the WSL2 Linux filesystem.
+// \\wsl$\Ubuntu\home\<user>\fabric-samples has the fresh TLS certs from this run.
+// Fall back to C:\fabric-samples (Windows) only if WSL2 path doesn't exist.
+function findCcpBase() {
+    const wslBase = '\\\\wsl$\\Ubuntu\\home\\smart_touch_pc\\fabric-samples';
+    if (fs.existsSync(path.join(wslBase, 'test-network'))) return wslBase;
+    if (fs.existsSync('C:\\fabric-samples\\test-network')) return 'C:\\fabric-samples';
+    return path.join(HOME, 'fabric-samples');
+}
+const ccpBase = findCcpBase();
 const ccpPath = path.join(
     ccpBase, 'test-network', 'organizations',
     'peerOrganizations', 'org1.example.com',
@@ -32,6 +53,14 @@ const ccpPath = path.join(
 
 let _fabricWarned = false;
 let _walletWarned = false;
+const _routeWarned = {};   // key: route, value: last error message shown
+
+function warnOnce(route, msg) {
+    if (_routeWarned[route] === msg) return;
+    _routeWarned[route] = msg;
+    console.error(`${route} error:`, msg);
+}
+function clearWarn(route) { delete _routeWarned[route]; }
 async function getContract() {
     if (!fs.existsSync(ccpPath)) {
         if (!_fabricWarned) {
@@ -43,6 +72,53 @@ async function getContract() {
     }
     _fabricWarned = false;
     const ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
+
+    // Inject orderer + Org2 peer so the SDK can route transactions without discovery.
+    // The generated connection-org1.json omits these; we add them from known test-network ports.
+    const ordererTLS = fs.readFileSync(
+        path.join(ccpBase, 'test-network', 'organizations',
+            'ordererOrganizations', 'example.com', 'orderers',
+            'orderer.example.com', 'msp', 'tlscacerts', 'tlsca.example.com-cert.pem'),
+        'utf8'
+    );
+    const org2TLS = fs.readFileSync(
+        path.join(ccpBase, 'test-network', 'organizations',
+            'peerOrganizations', 'org2.example.com', 'tlsca',
+            'tlsca.org2.example.com-cert.pem'),
+        'utf8'
+    );
+
+    ccp.orderers = {
+        'orderer.example.com': {
+            url: 'grpcs://localhost:7050',
+            tlsCACerts: { pem: ordererTLS },
+            grpcOptions: {
+                'ssl-target-name-override': 'orderer.example.com',
+                'hostnameOverride':         'orderer.example.com',
+            },
+        },
+    };
+    ccp.peers['peer0.org2.example.com'] = {
+        url: 'grpcs://localhost:9051',
+        tlsCACerts: { pem: org2TLS },
+        grpcOptions: {
+            'ssl-target-name-override': 'peer0.org2.example.com',
+            'hostnameOverride':         'peer0.org2.example.com',
+        },
+    };
+    ccp.organizations['Org2'] = {
+        mspid: 'Org2MSP',
+        peers: ['peer0.org2.example.com'],
+    };
+    ccp.channels = {
+        mychannel: {
+            orderers: ['orderer.example.com'],
+            peers: {
+                'peer0.org1.example.com': { endorsingPeer: true, chaincodeQuery: true, ledgerQuery: true, eventSource: true },
+                'peer0.org2.example.com': { endorsingPeer: true, chaincodeQuery: true, ledgerQuery: true, eventSource: false },
+            },
+        },
+    };
 
     const walletPath = path.join(__dirname, 'wallet');
     const wallet     = await Wallets.newFileSystemWallet(walletPath);
@@ -75,21 +151,24 @@ async function getContract() {
  * Spawn the Python FedAvg aggregator as a detached background process.
  * Non-blocking — the POST /api/updates response is already sent before this.
  */
-function triggerAggregation(round, modelType) {
+function triggerAggregation(round, modelType, algo = 'fedprox', mu = 0.01) {
     const aggregatorPath = path.join(__dirname, 'aggregator.py');
     const serverUrl      = `http://localhost:${PORT}`;
 
-    console.log(`\n[AGG] Threshold reached for model=${modelType} round=${round}`);
+    console.log(`\n[AGG] Threshold reached for model=${modelType} round=${round} algo=${algo}`);
     console.log(`[AGG] Spawning aggregator: ${aggregatorPath}`);
 
     const proc = spawn('python', [
         aggregatorPath,
         '--round',  String(round),
         '--model',  modelType,
+        '--algo',   algo,
+        '--mu',     String(mu),
         '--server', serverUrl,
     ], {
         detached: true,
-        stdio:    'inherit',   // aggregator logs print to this terminal
+        stdio:    'inherit',
+        env:      { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
     });
 
     proc.on('error', (err) => {
@@ -106,6 +185,34 @@ app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+/** GET /api/metrics — all round metrics for convergence charts */
+app.get('/api/metrics', (_req, res) => {
+    res.json({ success: true, count: _metrics.length, metrics: _metrics });
+});
+
+/** POST /api/metrics — called by aggregator.py after each round */
+app.post('/api/metrics', (req, res) => {
+    const { round, modelType, accuracy, algorithm, mu, clientCount, epsilon, timestamp } = req.body;
+    if (round == null || !modelType || accuracy == null) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+    const entry = {
+        round: parseInt(round, 10), modelType, accuracy: parseFloat(accuracy),
+        algorithm: algorithm || 'fedavg', mu: parseFloat(mu || 0),
+        clientCount: parseInt(clientCount || 0, 10),
+        epsilon: parseFloat(epsilon || 0),
+        timestamp: timestamp || new Date().toISOString(),
+    };
+    // Replace existing entry for same round+model+algorithm, or append
+    const idx = _metrics.findIndex(
+        m => m.round === entry.round && m.modelType === entry.modelType && m.algorithm === entry.algorithm
+    );
+    if (idx >= 0) _metrics[idx] = entry; else _metrics.push(entry);
+    saveMetrics();
+    console.log(`[Metrics] ${entry.modelType} round ${entry.round} ${entry.algorithm.toUpperCase()} accuracy=${(entry.accuracy*100).toFixed(2)}% ε=${entry.epsilon}`);
+    res.status(201).json({ success: true, entry });
+});
+
 /** GET /api/updates — all model updates */
 app.get('/api/updates', async (_req, res) => {
     let gateway;
@@ -116,7 +223,7 @@ app.get('/api/updates', async (_req, res) => {
         const updates = JSON.parse(data.toString());
         res.json({ success: true, count: updates.length, updates });
     } catch (err) {
-        console.error('GET /api/updates error:', err.message);
+        warnOnce('GET /api/updates', err.message);
         res.status(500).json({ success: false, error: err.message });
     } finally {
         if (gateway) gateway.disconnect();
@@ -133,7 +240,7 @@ app.get('/api/updates/round/:round', async (req, res) => {
         const updates = JSON.parse(data.toString());
         res.json({ success: true, round: parseInt(req.params.round, 10), count: updates.length, updates });
     } catch (err) {
-        console.error('GET /api/updates/round error:', err.message);
+        warnOnce('GET /api/updates/round', err.message);
         res.status(500).json({ success: false, error: err.message });
     } finally {
         if (gateway) gateway.disconnect();
@@ -150,7 +257,7 @@ app.get('/api/updates/sender/:sender', async (req, res) => {
         const updates = JSON.parse(data.toString());
         res.json({ success: true, sender: req.params.sender, count: updates.length, updates });
     } catch (err) {
-        console.error('GET /api/updates/sender error:', err.message);
+        warnOnce('GET /api/updates/sender', err.message);
         res.status(500).json({ success: false, error: err.message });
     } finally {
         if (gateway) gateway.disconnect();
@@ -168,7 +275,8 @@ app.post('/api/updates', async (req, res) => {
     let gateway;
     try {
         const { sender, modelType, round, ipfsCID,
-                clipValue = 1.0, noiseScale = 0.1 } = req.body;
+                clipValue = 1.0, noiseScale = 0.1,
+                sampleCount = 1000, algorithm = 'fedprox', mu = 0.01 } = req.body;
 
         if (!sender || !modelType || round == null || !ipfsCID) {
             return res.status(400).json({
@@ -224,12 +332,12 @@ app.post('/api/updates', async (req, res) => {
                 console.log(`[AGG] Global model for round ${round} ${modelType} already exists — skipping.`);
             } catch (_) {
                 // Expected: no global model yet → safe to aggregate.
-                triggerAggregation(round, modelType);
+                triggerAggregation(round, modelType, algorithm, parseFloat(mu));
             }
         }
 
     } catch (err) {
-        console.error('POST /api/updates error:', err.message);
+        warnOnce('POST /api/updates', err.message);
         if (!res.headersSent) {
             res.status(500).json({ success: false, error: err.message });
         }
@@ -280,7 +388,7 @@ app.post('/api/global-model', async (req, res) => {
             clientCount,
         });
     } catch (err) {
-        console.error('POST /api/global-model error:', err.message);
+        warnOnce('POST /api/global-model', err.message);
         res.status(500).json({ success: false, error: err.message });
     } finally {
         if (gateway) gateway.disconnect();
@@ -304,7 +412,7 @@ app.get('/api/global-model/:modelType/latest', async (req, res) => {
         res.json({ success: true, ...record });
     } catch (err) {
         const notFound = err.message.includes('No global model found');
-        console.error('GET /api/global-model/latest error:', err.message);
+        if (!notFound) warnOnce('GET /api/global-model/latest', err.message);
         res.status(notFound ? 404 : 500).json({ success: false, error: err.message });
     } finally {
         if (gateway) gateway.disconnect();
@@ -327,7 +435,7 @@ app.get('/api/global-model/:modelType/round/:round', async (req, res) => {
         res.json({ success: true, ...record });
     } catch (err) {
         const notFound = err.message.includes('No global model');
-        console.error('GET /api/global-model/round error:', err.message);
+        warnOnce('GET /api/global-model/round', err.message);
         res.status(notFound ? 404 : 500).json({ success: false, error: err.message });
     } finally {
         if (gateway) gateway.disconnect();
@@ -342,7 +450,8 @@ app.get('/api/global-model/:modelType/round/:round', async (req, res) => {
  * Spawns fl_client.py and returns stdout when done.
  */
 app.post('/api/simulate', (req, res) => {
-    const { sender, modelType, round, clip = 1.0, noise = 0.1, pullGlobal = false } = req.body;
+    const { sender, modelType, round, clip = 1.0, noise = 0.1,
+            pullGlobal = false, algo = 'fedprox', mu = 0.01, samples = 64 } = req.body;
 
     if (!sender || !modelType || round == null) {
         return res.status(400).json({ success: false, error: 'Missing required fields: sender, modelType, round' });
@@ -351,23 +460,28 @@ app.post('/api/simulate', (req, res) => {
     const clientScript = path.join(__dirname, '..', 'client', 'fl_client.py');
     const args = [
         clientScript,
-        '--sender', sender,
-        '--model',  modelType,
-        '--round',  String(round),
-        '--clip',   String(clip),
-        '--noise',  String(noise),
-        '--server', `http://localhost:${PORT}`,
+        '--sender',  sender,
+        '--model',   modelType,
+        '--round',   String(round),
+        '--clip',    String(clip),
+        '--noise',   String(noise),
+        '--algo',    algo,
+        '--mu',      String(mu),
+        '--samples', String(samples),
+        '--server',  `http://localhost:${PORT}`,
     ];
     if (pullGlobal) args.push('--pull-global');
 
     console.log(`[SIM] Running: python ${args.join(' ')}`);
 
-    const proc = spawn('python', args);
+    const proc = spawn('python', args, {
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+    });
     let output = '';
     let errors = '';
 
-    proc.stdout.on('data', d => { output += d.toString(); });
-    proc.stderr.on('data', d => { errors += d.toString(); });
+    proc.stdout.on('data', d => { output += d.toString('utf8'); });
+    proc.stderr.on('data', d => { errors += d.toString('utf8'); });
 
     proc.on('close', code => {
         const success = code === 0;
