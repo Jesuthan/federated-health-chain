@@ -37,6 +37,15 @@ import requests
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
+try:
+    from torchvision import transforms
+    from torchvision.datasets import ImageFolder
+    TORCHVISION_AVAILABLE = True
+except ImportError:
+    TORCHVISION_AVAILABLE = False
+
+# Real data root — folder relative to this script's location
+DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
 
 
 # ─── Model Architectures ───────────────────────────────────────────────────────
@@ -184,6 +193,69 @@ def generate_test_data(model_type: str, n_samples: int = 40) -> TensorDataset:
         images[mask, :, r[0], r[1]] += 0.4
 
     return TensorDataset(images, labels)
+
+
+# ─── Real Data Loaders ────────────────────────────────────────────────────────
+
+# Expected folder layout:
+#   data/hospital_1/covid/COVID-19/img.jpg
+#   data/hospital_1/covid/Normal/img.jpg
+#   data/hospital_1/covid/Viral_Pneumonia/img.jpg
+#   data/hospital_1/skin/MEL/img.jpg  ...etc
+#   data/test/covid/COVID-19/img.jpg  (shared evaluation set)
+#   data/test/skin/MEL/img.jpg
+
+_REAL_TRANSFORM = None
+
+def _get_transform():
+    global _REAL_TRANSFORM
+    if _REAL_TRANSFORM is None:
+        _REAL_TRANSFORM = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.Grayscale(num_output_channels=1),  # CNN expects 1 channel
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5], std=[0.5]),
+        ])
+    return _REAL_TRANSFORM
+
+
+def load_hospital_data(model_type: str, hospital_id: int, batch_size: int = 8):
+    """
+    Load real hospital training data from data/hospital_{id}/{model_type}/.
+    Returns (DataLoader, n_samples) or (None, 0) if the folder doesn't exist.
+    Sub-folders = class names (ImageFolder convention).
+    """
+    if not TORCHVISION_AVAILABLE:
+        return None, 0
+    folder = os.path.abspath(os.path.join(DATA_DIR, f'hospital_{hospital_id}', model_type))
+    if not os.path.isdir(folder):
+        return None, 0
+    dataset = ImageFolder(folder, transform=_get_transform())
+    if len(dataset) == 0:
+        return None, 0
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+    print(f"  Real data loaded: {folder}")
+    print(f"  Classes: {dataset.classes}")
+    dist = {cls: sum(1 for _, l in dataset.samples if l == i)
+            for i, cls in enumerate(dataset.classes)}
+    print(f"  Distribution: {dist}")
+    return loader, len(dataset)
+
+
+def load_test_data(model_type: str, batch_size: int = 16):
+    """
+    Load shared evaluation set from data/test/{model_type}/.
+    Returns DataLoader or None if not present.
+    """
+    if not TORCHVISION_AVAILABLE:
+        return None
+    folder = os.path.abspath(os.path.join(DATA_DIR, 'test', model_type))
+    if not os.path.isdir(folder):
+        return None
+    dataset = ImageFolder(folder, transform=_get_transform())
+    if len(dataset) == 0:
+        return None
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
 
 # ─── Real Training ─────────────────────────────────────────────────────────────
@@ -433,16 +505,21 @@ def main():
 
     original_state = {n: p.data.clone() for n, p in model.named_parameters()}
 
-    # [2] Generate non-IID hospital data + real training
-    print(f"\n[2/6] Generating non-IID data for {args.sender}…")
-    dataset    = generate_hospital_data(args.model, args.samples, hospital_id)
-    dataloader = DataLoader(dataset, batch_size=min(8, args.samples), shuffle=True)
+    # [2] Load training data — real if available, synthetic fallback
+    print(f"\n[2/6] Loading training data for {args.sender}…")
+    real_loader, real_n = load_hospital_data(args.model, hospital_id, batch_size=min(8, args.samples))
 
-    # Show class distribution
-    labels     = dataset.tensors[1]
-    class_names = CLASS_NAMES[args.model]
-    dist = {class_names[c]: int((labels == c).sum()) for c in range(NUM_CLASSES[args.model])}
-    print(f"  Class distribution (non-IID): {dist}")
+    if real_loader is not None:
+        dataloader = real_loader
+        print(f"  Using REAL data  ({real_n} samples)")
+    else:
+        print(f"  Real data not found — using synthetic non-IID data")
+        dataset    = generate_hospital_data(args.model, args.samples, hospital_id)
+        dataloader = DataLoader(dataset, batch_size=min(8, args.samples), shuffle=True)
+        labels     = dataset.tensors[1]
+        class_names = CLASS_NAMES[args.model]
+        dist = {class_names[c]: int((labels == c).sum()) for c in range(NUM_CLASSES[args.model])}
+        print(f"  Class distribution (non-IID): {dist}")
 
     print(f"\n  Training with {args.algo.upper()}…")
     if args.algo == 'fedprox':

@@ -261,8 +261,13 @@
 
       <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-5">
         <div class="lg:col-span-2">
-          <label>Hospital Name</label>
-          <input id="sim-sender" type="text" placeholder="e.g. Hospital1" value="Hospital1" />
+          <label>Hospital</label>
+          <select id="sim-sender">
+            <option value="Hospital1">Hospital 1</option>
+            <option value="Hospital2">Hospital 2</option>
+            <option value="Hospital3">Hospital 3</option>
+            <option value="Hospital4">Hospital 4</option>
+          </select>
         </div>
         <div>
           <label>Model Type</label>
@@ -496,6 +501,19 @@
       badge.classList.remove('hidden');
 
       try {
+        // Pre-flight duplicate check before spawning the Python process
+        const checkRes = await fetchJSON('/api/updates/round/' + round).catch(() => null);
+        if (checkRes && checkRes.updates) {
+          const alreadySubmitted = checkRes.updates.some(u => u.sender === sender && u.modelType === modelType);
+          if (alreadySubmitted) {
+            logEl.innerHTML = `<span class="log-error">⚠ Duplicate rejected: ${sender} already submitted for ${modelType.toUpperCase()} Round ${round}.\nEach hospital can only submit once per round. Choose a different hospital or round.</span>`;
+            badge.className = 'pill badge-waiting';
+            badge.textContent = '✗ Duplicate';
+            btnA.disabled = false; btnB.disabled = false;
+            return;
+          }
+        }
+
         const res = await fetchJSON('/api/simulate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

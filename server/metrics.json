@@ -1,0 +1,32 @@
+[
+  {
+    "round": 1,
+    "modelType": "covid",
+    "accuracy": 0.6333,
+    "algorithm": "fedprox",
+    "mu": 0.01,
+    "clientCount": 2,
+    "epsilon": 0.048448,
+    "timestamp": "2026-06-11T12:56:18.320143+00:00"
+  },
+  {
+    "round": 2,
+    "modelType": "covid",
+    "accuracy": 0.6667,
+    "algorithm": "fedprox",
+    "mu": 0.01,
+    "clientCount": 2,
+    "epsilon": 0.048448,
+    "timestamp": "2026-06-11T13:08:21.280737+00:00"
+  },
+  {
+    "round": 3,
+    "modelType": "covid",
+    "accuracy": 0.6667,
+    "algorithm": "fedprox",
+    "mu": 0.01,
+    "clientCount": 2,
+    "epsilon": 0.048448,
+    "timestamp": "2026-06-11T13:12:07.994625+00:00"
+  }
+]

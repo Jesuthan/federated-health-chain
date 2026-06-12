@@ -2,6 +2,11 @@
 
 const { Contract } = require('fabric-contract-api');
 
+// Composite key namespaces used for LevelDB-compatible range queries
+const CK_BY_ROUND_MODEL = 'updByRM';    // [round, modelType, updateId]
+const CK_BY_ROUND       = 'updByRound'; // [round, updateId]
+const CK_BY_SENDER      = 'updBySender';// [sender, updateId]
+
 class ModelRegistry extends Contract {
 
     async initLedger(ctx) {
@@ -12,13 +17,8 @@ class ModelRegistry extends Contract {
 
     /**
      * Store a federated learning model update (weight delta) on the ledger.
-     * @param {string} updateId   - Unique ID for this update
-     * @param {string} sender     - Client identifier (e.g. "Hospital1")
-     * @param {string} modelType  - "covid" | "skin"
-     * @param {string} round      - FL round number
-     * @param {string} ipfsCID    - IPFS CID of the delta .pt file
-     * @param {string} clipValue  - DP gradient clip norm
-     * @param {string} noiseScale - DP Gaussian noise scale
+     * Also writes three composite-key index entries so we can range-query by
+     * round+modelType, round, or sender without requiring CouchDB.
      */
     async storeUpdate(ctx, updateId, sender, modelType, round, ipfsCID, clipValue, noiseScale) {
         const existing = await ctx.stub.getState(updateId);
@@ -28,20 +28,40 @@ class ModelRegistry extends Contract {
 
         const txTs = ctx.stub.getTxTimestamp();
         const timestamp = new Date(Number(txTs.seconds) * 1000).toISOString();
+        const roundInt = parseInt(round, 10);
 
         const record = {
             docType:    'modelUpdate',
             updateId,
             sender,
             modelType,
-            round:      parseInt(round, 10),
+            round:      roundInt,
             ipfsCID,
             timestamp,
             clipValue:  parseFloat(clipValue),
             noiseScale: parseFloat(noiseScale),
         };
 
-        await ctx.stub.putState(updateId, Buffer.from(JSON.stringify(record)));
+        const encoded = Buffer.from(JSON.stringify(record));
+
+        // Primary record
+        await ctx.stub.putState(updateId, encoded);
+
+        // Composite-key indexes (value = full record for direct iteration)
+        const roundStr = String(roundInt);
+        await ctx.stub.putState(
+            ctx.stub.createCompositeKey(CK_BY_ROUND_MODEL, [roundStr, modelType, updateId]),
+            encoded,
+        );
+        await ctx.stub.putState(
+            ctx.stub.createCompositeKey(CK_BY_ROUND, [roundStr, updateId]),
+            encoded,
+        );
+        await ctx.stub.putState(
+            ctx.stub.createCompositeKey(CK_BY_SENDER, [sender, updateId]),
+            encoded,
+        );
+
         console.log(`Stored update: ${updateId} | sender: ${sender} | model: ${modelType} | round: ${round}`);
         return JSON.stringify(record);
     }
@@ -55,7 +75,7 @@ class ModelRegistry extends Contract {
         return data.toString();
     }
 
-    /** Return all stored model updates. */
+    /** Return all stored model updates (LevelDB-compatible range scan). */
     async getAllUpdates(ctx) {
         const iterator = await ctx.stub.getStateByRange('', '');
         const results  = [];
@@ -74,36 +94,23 @@ class ModelRegistry extends Contract {
         return JSON.stringify(results);
     }
 
-    /** Query updates by FL round (requires CouchDB). */
+    /** Query updates by FL round (LevelDB-compatible via composite key). */
     async queryByRound(ctx, round) {
-        const query = {
-            selector: { docType: 'modelUpdate', round: parseInt(round, 10) },
-        };
-        return this._runQuery(ctx, query);
+        return this._queryComposite(ctx, CK_BY_ROUND, [String(parseInt(round, 10))]);
     }
 
-    /** Query updates by sender (requires CouchDB). */
+    /** Query updates by sender (LevelDB-compatible via composite key). */
     async queryBySender(ctx, sender) {
-        const query = {
-            selector: { docType: 'modelUpdate', sender },
-        };
-        return this._runQuery(ctx, query);
+        return this._queryComposite(ctx, CK_BY_SENDER, [sender]);
     }
 
     /**
      * Query updates for a specific round AND model type.
      * Used by server.js to count submissions and trigger aggregation.
-     * Requires CouchDB.
+     * LevelDB-compatible via composite key.
      */
     async queryByRoundAndModel(ctx, round, modelType) {
-        const query = {
-            selector: {
-                docType:   'modelUpdate',
-                round:     parseInt(round, 10),
-                modelType,
-            },
-        };
-        return this._runQuery(ctx, query);
+        return this._queryComposite(ctx, CK_BY_ROUND_MODEL, [String(parseInt(round, 10)), modelType]);
     }
 
     // ─── Global Model ─────────────────────────────────────────────────────────────
@@ -113,11 +120,6 @@ class ModelRegistry extends Contract {
      * Two keys are written:
      *   globalModel_{modelType}_round{round}  ← immutable per-round record
      *   globalModel_{modelType}_current       ← mutable pointer to latest round
-     *
-     * @param {string} round        - FL round number
-     * @param {string} modelType    - "covid" | "skin"
-     * @param {string} ipfsCID      - IPFS CID of the global model .pt file
-     * @param {string} clientCount  - number of clients merged in this round
      */
     async storeGlobalModel(ctx, round, modelType, ipfsCID, clientCount) {
         const roundInt = parseInt(round, 10);
@@ -144,10 +146,7 @@ class ModelRegistry extends Contract {
         return JSON.stringify(record);
     }
 
-    /**
-     * Return the latest global model record for a given model type.
-     * Reads the mutable `globalModel_{modelType}_current` key.
-     */
+    /** Return the latest global model record for a given model type. */
     async getLatestGlobalModel(ctx, modelType) {
         const key  = `globalModel_${modelType}_current`;
         const data = await ctx.stub.getState(key);
@@ -157,9 +156,7 @@ class ModelRegistry extends Contract {
         return data.toString();
     }
 
-    /**
-     * Return the global model for a specific round + model type.
-     */
+    /** Return the global model for a specific round + model type. */
     async getGlobalModelByRound(ctx, round, modelType) {
         const key  = `globalModel_${modelType}_round${parseInt(round, 10)}`;
         const data = await ctx.stub.getState(key);
@@ -171,8 +168,8 @@ class ModelRegistry extends Contract {
 
     // ─── Internal ─────────────────────────────────────────────────────────────────
 
-    async _runQuery(ctx, queryObject) {
-        const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryObject));
+    async _queryComposite(ctx, namespace, partialAttrs) {
+        const iterator = await ctx.stub.getStateByPartialCompositeKey(namespace, partialAttrs);
         const results  = [];
         let result     = await iterator.next();
 

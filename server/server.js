@@ -137,7 +137,7 @@ async function getContract() {
     await gateway.connect(ccp, {
         wallet,
         identity:  'appUser',
-        discovery: { enabled: true, asLocalhost: true },
+        discovery: { enabled: false },
     });
 
     const network  = await gateway.getNetwork(CHANNEL_NAME);
@@ -287,6 +287,17 @@ app.post('/api/updates', async (req, res) => {
 
         const { gateway: gw, contract } = await getContract();
         gateway = gw;
+
+        // Reject duplicate submission from the same hospital for the same round+model
+        const existingRaw = await contract.evaluateTransaction('queryByRoundAndModel', String(round), modelType);
+        const existing = JSON.parse(existingRaw.toString());
+        const duplicate = existing.find(u => u.sender === sender);
+        if (duplicate) {
+            return res.status(409).json({
+                success: false,
+                error: `${sender} already submitted for ${modelType} round ${round}. Each hospital can only submit once per round.`,
+            });
+        }
 
         const id = `update_${sender}_round${round}_${uuidv4().slice(0, 8)}`;
 
