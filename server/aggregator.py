@@ -47,7 +47,7 @@ IPFS_ADDR      = os.environ.get('IPFS_ADDR', '/ip4/127.0.0.1/tcp/5001')
 # ─── Model Architectures (mirrors fl_client.py) ────────────────────────────────
 
 class CovidCNN(nn.Module):
-    """4-block CNN matching sanjulamaduranga/BFL_Healthcare_covid_19 weights."""
+    """4-block CNN for COVID-19 chest X-ray classification (3 classes)."""
     def __init__(self, num_classes=3):
         super().__init__()
         self.layers = nn.Sequential(
@@ -323,7 +323,7 @@ def load_base_model(model_type: str, round_num: int, server_url: str) -> dict:
     if not os.path.exists(base_path):
         raise FileNotFoundError(
             f"Base model not found: {base_path}\n"
-            "Run:  python models/inspect_hf_models.py"
+            "Place pretrained weights in models/ folder."
         )
     print(f"  Using HF pretrained base: {base_path}")
     return torch.load(base_path, map_location='cpu', weights_only=False)

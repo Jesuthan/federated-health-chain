@@ -4,7 +4,7 @@ Federated Learning Client  —  FedProx / FedAvg  (Real Training)
 ================================================================
 Pipeline:
   [0] (optional) Pull latest global model from blockchain → IPFS
-  [1] Load pretrained model weights (HuggingFace)
+  [1] Load pretrained model weights
   [2] Real local training — FedProx (default) or FedAvg
       Uses real PyTorch gradient descent on synthetic non-IID hospital data.
       Replace generate_hospital_data() with your real DataLoader when available.
@@ -51,7 +51,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
 # ─── Model Architectures ───────────────────────────────────────────────────────
 
 class CovidCNN(nn.Module):
-    """4-block CNN matching sanjulamaduranga/BFL_Healthcare_covid_19 weights."""
+    """4-block CNN for COVID-19 chest X-ray classification (3 classes)."""
     def __init__(self, num_classes=3):
         super().__init__()
         self.layers = nn.Sequential(
@@ -346,13 +346,13 @@ def load_weights(model_type: str, state_dict: dict = None) -> nn.Module:
 
 
 def load_pretrained(model_type: str) -> nn.Module:
-    """Load HuggingFace pretrained weights from models/{model_type}_model.pth."""
+    """Load pretrained weights from models/{model_type}_model.pth."""
     weight_file = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'models', f'{model_type}_model.pth')
     )
     if not os.path.exists(weight_file):
         print(f"  Warning: pretrained weights not found at {weight_file}")
-        print("  Using random initialisation. Run: python models/inspect_hf_models.py")
+        print("  Using random initialisation. Place pretrained weights in models/ folder.")
         return load_weights(model_type)
 
     state = torch.load(weight_file, map_location='cpu', weights_only=False)
