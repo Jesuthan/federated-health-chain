@@ -6,7 +6,7 @@ A research system combining **Federated Learning**, **Hyperledger Fabric blockch
 
 ## What This System Does
 
-Multiple hospitals train a shared AI model (COVID-19 / Skin Cancer detection) on their **local data only**. Only the model weight updates (deltas) are shared — never the patient data. The blockchain provides an immutable audit trail of every training round.
+Multiple hospitals train a shared AI model (COVID-19 detection) on their **local data only**. Only the model weight updates (deltas) are shared — never the patient data. The blockchain provides an immutable audit trail of every training round.
 
 ```text
 Hospital 1 --+
@@ -128,15 +128,6 @@ Input: 1 x 224 x 224 (grayscale chest X-ray)
   Flatten  ->  FC(50176, 128)  ->  FC(128, 3)
 ```
 
-### SkinCNN — 7 classes: MEL | NV | BCC | AK | BKL | DF | VASC (HAM10000)
-
-```text
-Input: 1 x 224 x 224
-  Conv2d(1, 32, 3)  + ReLU + MaxPool(2)
-  Conv2d(32, 64, 3) + ReLU + MaxPool(2)
-  Flatten  ->  FC(200704, 128)  ->  FC(128, 7)
-```
-
 ---
 
 ## Prerequisites
@@ -198,25 +189,23 @@ Start FL Server   ->  wait: "Listening on http://localhost:3000"
 
 **From the dashboard simulator:**
 
-| Field | Hospital 1 | Hospital 2 |
-| ----- | ---------- | ---------- |
-| Hospital Name | `Hospital1` | `Hospital2` |
-| Model Type | COVID-19 | COVID-19 |
-| Round No. | 1 | 1 |
-| Algorithm | FedProx | FedProx |
-| mu | 0.01 | 0.01 |
-| Samples | 64 | 64 |
+| Field | Hospital 1 | Hospital 2 | Hospital 3 |
+| ----- | ---------- | ---------- | ---------- |
+| Hospital Name | `Hospital1` | `Hospital2` | `Hospital3` |
+| Model Type | COVID-19 | COVID-19 | COVID-19 |
+| Round No. | 1 | 1 | 1 |
+| Algorithm | FedProx | FedProx | FedProx |
+| mu | 0.01 | 0.01 | 0.01 |
+| Samples | 200 | 200 | 200 |
 
-Submit Hospital1 → wait ~20s → Submit Hospital2 → aggregation triggers automatically.
+Submit all 3 hospitals → aggregation triggers automatically after the 3rd submission.
 
 **Or via terminal:**
 
 ```bash
-python client/fl_client.py --sender Hospital1 --model covid --round 1 \
-    --algo fedprox --mu 0.01 --samples 64
-
-python client/fl_client.py --sender Hospital2 --model covid --round 1 \
-    --algo fedprox --mu 0.01 --samples 64
+python client/fl_client.py --sender Hospital1 --model covid --round 1 --algo fedprox --mu 0.01 --samples 200
+python client/fl_client.py --sender Hospital2 --model covid --round 1 --algo fedprox --mu 0.01 --samples 200
+python client/fl_client.py --sender Hospital3 --model covid --round 1 --algo fedprox --mu 0.01 --samples 200
 ```
 
 Repeat with `--round 2`, `--round 3` etc. to build the convergence curve.
@@ -274,8 +263,7 @@ FedProx consistently outperforms FedAvg on non-IID medical data:
 | Metric | FedProx (mu=0.01) | FedAvg (baseline) |
 | ------ | ----------------- | ----------------- |
 | Convergence rate | ~25% per round | ~15% per round |
-| Peak accuracy — COVID | ~94.4% | ~89.9% |
-| Peak accuracy — Skin | ~91.2% | ~86.7% |
+| Peak accuracy — COVID | ~74.6% | baseline |
 
 FedProx achieves approximately **4.5% higher accuracy** at convergence, consistent with the theoretical analysis in Li et al. (ICLR 2020).
 
