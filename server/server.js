@@ -29,7 +29,7 @@ const CHANNEL_NAME   = 'mychannel';
 const CHAINCODE_NAME = 'modelregistry';
 
 // How many hospital updates per round+model trigger FedAvg aggregation.
-const MIN_CLIENTS = parseInt(process.env.MIN_CLIENTS || '2', 10);
+const MIN_CLIENTS = parseInt(process.env.MIN_CLIENTS || '3', 10);
 
 const HOME    = process.env.HOME || process.env.USERPROFILE;
 

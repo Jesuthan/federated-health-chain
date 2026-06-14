@@ -168,7 +168,7 @@ function startFLServer() {
   const serverDir    = path.join(__dirname, 'server');
   const serverScript = path.join(serverDir, 'server.js');
   const nodeModules  = path.join(serverDir, 'node_modules');
-  const minClients   = process.env.MIN_CLIENTS || '2';
+  const minClients   = process.env.MIN_CLIENTS || '3';
 
   // Auto-install server deps if missing
   if (!fs.existsSync(nodeModules)) {
