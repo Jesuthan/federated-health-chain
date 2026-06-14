@@ -11,3 +11,7 @@ __pycache__/
 fabric-samples/
 kubo/
 *.tar.gz
+*.pdf
+*.pptx
+*.ppt
+*.docx
