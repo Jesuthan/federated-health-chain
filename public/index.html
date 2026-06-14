@@ -165,13 +165,6 @@
           <p style="font-size:1.6rem; font-weight:700; color:#1d4ed8; line-height:1.2;" id="stat-covid">—</p>
         </div>
       </div>
-      <div class="card p-5 flex items-center gap-4">
-        <div class="stat-icon" style="background:#f0fdf4;">🔬</div>
-        <div>
-          <p style="font-size:0.72rem; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Skin Cancer</p>
-          <p style="font-size:1.6rem; font-weight:700; color:#059669; line-height:1.2;" id="stat-skin">—</p>
-        </div>
-      </div>
     </div>
 
     <!-- ── SERVICES ─────────────────────────────────────────────────────────── -->
@@ -273,7 +266,6 @@
           <label>Model Type</label>
           <select id="sim-model">
             <option value="covid">COVID-19</option>
-            <option value="skin">Skin Cancer</option>
           </select>
         </div>
         <div>
@@ -301,7 +293,7 @@
         </div>
         <div>
           <label>Samples</label>
-          <input id="sim-samples" type="number" value="64" step="32" min="16" max="512" />
+          <input id="sim-samples" type="number" value="67" step="50" min="50" max="449" />
         </div>
       </div>
 
@@ -316,7 +308,6 @@
         </button>
         <div class="flex items-center gap-2 ml-auto">
           <button class="btn btn-outline text-xs" onclick="triggerAgg('covid')">Force FedAvg COVID</button>
-          <button class="btn btn-outline text-xs" onclick="triggerAgg('skin')">Force FedAvg Skin</button>
         </div>
       </div>
 
@@ -327,9 +318,8 @@
     </div>
 
     <!-- ── MODEL PANELS ──────────────────────────────────────────────────────── -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="grid grid-cols-1 gap-5">
       <div id="panel-covid" class="card p-6"></div>
-      <div id="panel-skin"  class="card p-6"></div>
     </div>
 
     <!-- ── RESEARCH RESULTS ──────────────────────────────────────────────────── -->
@@ -340,25 +330,15 @@
       </p>
 
       <!-- Algorithm comparison cards -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="algo-summary">
+      <div class="grid grid-cols-2 gap-4 mb-6" id="algo-summary">
         <div class="card-inner p-4 text-center">
           <p style="font-size:0.7rem;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.05em;">FedProx  COVID</p>
           <p style="font-size:1.6rem;font-weight:700;color:#0f172a;" id="res-fedprox-covid">—</p>
           <p style="font-size:0.72rem;color:#64748b;">best accuracy</p>
         </div>
         <div class="card-inner p-4 text-center">
-          <p style="font-size:0.7rem;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:0.05em;">FedProx  Skin</p>
-          <p style="font-size:1.6rem;font-weight:700;color:#0f172a;" id="res-fedprox-skin">—</p>
-          <p style="font-size:0.72rem;color:#64748b;">best accuracy</p>
-        </div>
-        <div class="card-inner p-4 text-center">
           <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">FedAvg  COVID</p>
           <p style="font-size:1.6rem;font-weight:700;color:#0f172a;" id="res-fedavg-covid">—</p>
-          <p style="font-size:0.72rem;color:#64748b;">best accuracy</p>
-        </div>
-        <div class="card-inner p-4 text-center">
-          <p style="font-size:0.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">FedAvg  Skin</p>
-          <p style="font-size:1.6rem;font-weight:700;color:#0f172a;" id="res-fedavg-skin">—</p>
           <p style="font-size:0.72rem;color:#64748b;">best accuracy</p>
         </div>
       </div>
@@ -434,7 +414,7 @@
   </main>
 
   <script>
-    const MIN_CLIENTS = 2;
+    const MIN_CLIENTS = 3;
     const POLL_MS     = 5000;
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -595,11 +575,10 @@
     // ── Model panel ──────────────────────────────────────────────────────────────
 
     function renderModelPanel(el, modelType, allUpdates, globalModel) {
-      const isCovid   = modelType === 'covid';
-      const label     = isCovid ? 'COVID-19 Model' : 'Skin Cancer Model';
-      const accent    = isCovid ? '#1d4ed8' : '#059669';
-      const accentBg  = isCovid ? '#eff6ff' : '#f0fdf4';
-      const barClr    = isCovid ? '#1d4ed8' : '#059669';
+      const label     = 'COVID-19 Model';
+      const accent    = '#1d4ed8';
+      const accentBg  = '#eff6ff';
+      const barClr    = '#1d4ed8';
       const updates   = allUpdates.filter(u => u.modelType === modelType);
 
       const byRound = {};
@@ -654,7 +633,7 @@
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
             <div style="width:36px;height:36px;border-radius:10px;background:${accentBg};display:flex;align-items:center;justify-content:center;font-size:1.1rem;">
-              ${isCovid ? '🫁' : '🔬'}
+              🫁
             </div>
             <div>
               <h3 style="font-weight:700; font-size:0.95rem;">${label}</h3>
@@ -714,9 +693,7 @@
         <tr class="tbl-row">
           <td style="font-weight:600; color:#0f172a;">${u.sender}</td>
           <td>
-            <span class="pill ${u.modelType === 'covid' ? 'badge-waiting' : 'badge-done'}">
-              ${u.modelType === 'covid' ? '🫁 COVID' : '🔬 Skin'}
-            </span>
+            <span class="pill badge-waiting">🫁 COVID</span>
           </td>
           <td style="font-weight:500;">Round ${u.round}</td>
           <td style="max-width:160px;">
@@ -731,12 +708,10 @@
 
     function renderStats(updates) {
       const covid  = updates.filter(u => u.modelType === 'covid').length;
-      const skin   = updates.filter(u => u.modelType === 'skin').length;
       const rounds = new Set(updates.map(u => `${u.modelType}-${u.round}`)).size;
       document.getElementById('stat-total').textContent  = updates.length;
       document.getElementById('stat-rounds').textContent = rounds;
       document.getElementById('stat-covid').textContent  = covid;
-      document.getElementById('stat-skin').textContent   = skin;
     }
 
     // ── Server status ────────────────────────────────────────────────────────────
@@ -750,16 +725,14 @@
 
     async function refresh() {
       try {
-        const [updatesRes, globalCovid, globalSkin] = await Promise.all([
+        const [updatesRes, globalCovid] = await Promise.all([
           fetchJSON('/api/updates'),
           fetchGlobalModel('covid'),
-          fetchGlobalModel('skin'),
         ]);
         const updates = updatesRes.updates ?? [];
         setStatus(true);
         renderStats(updates);
         renderModelPanel(document.getElementById('panel-covid'), 'covid', updates, globalCovid);
-        renderModelPanel(document.getElementById('panel-skin'),  'skin',  updates, globalSkin);
         renderTable(updates);
         document.getElementById('last-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
       } catch {
@@ -858,9 +831,7 @@
 
     const CHART_COLORS = {
       'fedprox-covid': { border: '#1d4ed8', bg: 'rgba(29,78,216,0.08)', dash: [] },
-      'fedprox-skin':  { border: '#059669', bg: 'rgba(5,150,105,0.08)',  dash: [] },
       'fedavg-covid':  { border: '#93c5fd', bg: 'rgba(147,197,253,0.05)', dash: [6,3] },
-      'fedavg-skin':   { border: '#6ee7b7', bg: 'rgba(110,231,183,0.05)', dash: [6,3] },
     };
 
     function buildChartDatasets(metrics, valueKey) {
@@ -874,7 +845,7 @@
         const c = CHART_COLORS[key] || { border: '#94a3b8', bg: 'rgba(148,163,184,0.05)', dash: [4,2] };
         const [algo, model] = key.split('-');
         return {
-          label:           `${algo.toUpperCase()} · ${model === 'covid' ? 'COVID-19' : 'Skin Cancer'}`,
+          label:           `${algo.toUpperCase()} · COVID-19`,
           data:            points.sort((a,b) => a.x - b.x),
           borderColor:     c.border,
           backgroundColor: c.bg,
@@ -944,8 +915,7 @@
       tbody.innerHTML = sorted.map(m => `
         <tr class="tbl-row">
           <td style="font-weight:600;">Round ${m.round}</td>
-          <td><span class="pill ${m.modelType === 'covid' ? 'badge-waiting' : 'badge-done'}">
-            ${m.modelType === 'covid' ? '🫁 COVID' : '🔬 Skin'}</span></td>
+          <td><span class="pill badge-waiting">🫁 COVID</span></td>
           <td><span style="font-weight:600;color:${m.algorithm==='fedprox'?'#1d4ed8':'#64748b'}">
             ${m.algorithm.toUpperCase()}</span></td>
           <td style="color:#64748b;">${m.algorithm === 'fedprox' ? m.mu : '—'}</td>
@@ -964,9 +934,7 @@
         return (Math.max(...rows.map(r => r.accuracy)) * 100).toFixed(1) + '%';
       };
       document.getElementById('res-fedprox-covid').textContent = best('fedprox', 'covid');
-      document.getElementById('res-fedprox-skin').textContent  = best('fedprox', 'skin');
       document.getElementById('res-fedavg-covid').textContent  = best('fedavg',  'covid');
-      document.getElementById('res-fedavg-skin').textContent   = best('fedavg',  'skin');
     }
 
     async function refreshMetrics() {

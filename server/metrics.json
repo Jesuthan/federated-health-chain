@@ -2,31 +2,51 @@
   {
     "round": 1,
     "modelType": "covid",
-    "accuracy": 0.6333,
+    "accuracy": 0.7463,
     "algorithm": "fedprox",
     "mu": 0.01,
-    "clientCount": 2,
+    "clientCount": 3,
     "epsilon": 0.048448,
-    "timestamp": "2026-06-11T12:56:18.320143+00:00"
+    "timestamp": "2026-06-14T09:51:36.564870+00:00"
   },
   {
     "round": 2,
     "modelType": "covid",
-    "accuracy": 0.6667,
+    "accuracy": 0.6617,
     "algorithm": "fedprox",
     "mu": 0.01,
-    "clientCount": 2,
+    "clientCount": 3,
     "epsilon": 0.048448,
-    "timestamp": "2026-06-11T13:08:21.280737+00:00"
+    "timestamp": "2026-06-14T10:04:35.469546+00:00"
   },
   {
     "round": 3,
     "modelType": "covid",
-    "accuracy": 0.6667,
+    "accuracy": 0.5274,
     "algorithm": "fedprox",
     "mu": 0.01,
-    "clientCount": 2,
+    "clientCount": 3,
     "epsilon": 0.048448,
-    "timestamp": "2026-06-11T13:12:07.994625+00:00"
+    "timestamp": "2026-06-14T10:13:08.888509+00:00"
+  },
+  {
+    "round": 4,
+    "modelType": "covid",
+    "accuracy": 0.4826,
+    "algorithm": "fedprox",
+    "mu": 0.01,
+    "clientCount": 3,
+    "epsilon": 0.048448,
+    "timestamp": "2026-06-14T10:23:26.771768+00:00"
+  },
+  {
+    "round": 5,
+    "modelType": "covid",
+    "accuracy": 0.592,
+    "algorithm": "fedprox",
+    "mu": 0.01,
+    "clientCount": 3,
+    "epsilon": 0.048448,
+    "timestamp": "2026-06-14T10:38:29.598871+00:00"
   }
 ]

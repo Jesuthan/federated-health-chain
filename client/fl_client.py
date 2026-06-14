@@ -68,29 +68,10 @@ class CovidCNN(nn.Module):
         return self.fc2(torch.relu(self.fc1(x)))
 
 
-class SkinCNN(nn.Module):
-    """2-block CNN for HAM10000 skin lesion classification (7 classes)."""
-    def __init__(self, num_classes=7):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, padding=1)
-        self.pool  = nn.MaxPool2d(2)
-        self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
-        self.fc1   = nn.Linear(64 * 56 * 56, 128)
-        self.fc2   = nn.Linear(128, num_classes)
-
-    def forward(self, x):
-        import torch.nn.functional as F
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(x.size(0), -1)
-        return self.fc2(F.relu(self.fc1(x)))
-
-
-MODEL_CLASS    = {'covid': CovidCNN,  'skin': SkinCNN}
-NUM_CLASSES    = {'covid': 3,         'skin': 7}
+MODEL_CLASS    = {'covid': CovidCNN}
+NUM_CLASSES    = {'covid': 3}
 CLASS_NAMES    = {
     'covid': ['COVID-19', 'Normal', 'Viral Pneumonia'],
-    'skin':  ['MEL', 'NV', 'BCC', 'AK', 'BKL', 'DF', 'VASC'],
 }
 
 
@@ -132,20 +113,17 @@ def generate_hospital_data(model_type: str, n_samples: int, hospital_id: int) ->
         labels_list.extend([c] * cnt)
     labels = torch.tensor(labels_list, dtype=torch.long)
 
-    # Generate 224×224 grayscale images with class-specific visual patterns
-    # so the CNN can actually learn to distinguish classes via gradient descent
-    images = torch.randn(n_samples, 1, 224, 224) * 0.15
+    img_size = 224
+    images = torch.randn(n_samples, 1, img_size, img_size) * 0.15
 
     for c in range(num_classes):
         mask = labels == c
         if mask.sum() == 0:
             continue
-        # Global brightness encodes the class
-        brightness = (c / (num_classes - 1)) * 1.2 - 0.6   # range [-0.6, +0.6]
+        brightness = (c / (num_classes - 1)) * 1.2 - 0.6
         images[mask] += brightness
-        # Spatial pattern: different quadrant lit per class
         quad = c % 4
-        h, w = 224, 224
+        h, w = img_size, img_size
         mid_h, mid_w = h // 2, w // 2
         regions = [
             (slice(0, mid_h),   slice(0, mid_w)),    # top-left
@@ -173,7 +151,8 @@ def generate_test_data(model_type: str, n_samples: int = 40) -> TensorDataset:
     labels = torch.tensor(labels_list, dtype=torch.long)
     n      = len(labels)
 
-    images = torch.randn(n, 1, 224, 224) * 0.15
+    img_size = 224
+    images = torch.randn(n, 1, img_size, img_size) * 0.15
     for c in range(num_classes):
         mask = labels == c
         if mask.sum() == 0:
@@ -181,7 +160,7 @@ def generate_test_data(model_type: str, n_samples: int = 40) -> TensorDataset:
         brightness = (c / (num_classes - 1)) * 1.2 - 0.6
         images[mask] += brightness
         quad = c % 4
-        h, w = 224, 224
+        h, w = img_size, img_size
         mid_h, mid_w = h // 2, w // 2
         regions = [
             (slice(0, mid_h),   slice(0, mid_w)),
@@ -201,22 +180,20 @@ def generate_test_data(model_type: str, n_samples: int = 40) -> TensorDataset:
 #   data/hospital_1/covid/COVID-19/img.jpg
 #   data/hospital_1/covid/Normal/img.jpg
 #   data/hospital_1/covid/Viral_Pneumonia/img.jpg
-#   data/hospital_1/skin/MEL/img.jpg  ...etc
 #   data/test/covid/COVID-19/img.jpg  (shared evaluation set)
-#   data/test/skin/MEL/img.jpg
 
-_REAL_TRANSFORM = None
+_TRANSFORMS = {}
 
-def _get_transform():
-    global _REAL_TRANSFORM
-    if _REAL_TRANSFORM is None:
-        _REAL_TRANSFORM = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.Grayscale(num_output_channels=1),  # CNN expects 1 channel
+def _get_transform(model_type: str = 'covid'):
+    if model_type not in _TRANSFORMS:
+        size = 224
+        _TRANSFORMS[model_type] = transforms.Compose([
+            transforms.Resize((size, size)),
+            transforms.Grayscale(num_output_channels=1),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.5], std=[0.5]),
         ])
-    return _REAL_TRANSFORM
+    return _TRANSFORMS[model_type]
 
 
 def load_hospital_data(model_type: str, hospital_id: int, batch_size: int = 8):
@@ -230,7 +207,7 @@ def load_hospital_data(model_type: str, hospital_id: int, batch_size: int = 8):
     folder = os.path.abspath(os.path.join(DATA_DIR, f'hospital_{hospital_id}', model_type))
     if not os.path.isdir(folder):
         return None, 0
-    dataset = ImageFolder(folder, transform=_get_transform())
+    dataset = ImageFolder(folder, transform=_get_transform(model_type))
     if len(dataset) == 0:
         return None, 0
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=False)
@@ -252,7 +229,7 @@ def load_test_data(model_type: str, batch_size: int = 16):
     folder = os.path.abspath(os.path.join(DATA_DIR, 'test', model_type))
     if not os.path.isdir(folder):
         return None
-    dataset = ImageFolder(folder, transform=_get_transform())
+    dataset = ImageFolder(folder, transform=_get_transform(model_type))
     if len(dataset) == 0:
         return None
     return DataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -451,7 +428,7 @@ def submit_blockchain(sender, model_type, round_num, cid,
 def main():
     parser = argparse.ArgumentParser(description='FL Client — FedProx/FedAvg')
     parser.add_argument('--sender',      required=True)
-    parser.add_argument('--model',       required=True,  choices=['covid', 'skin'])
+    parser.add_argument('--model',       required=True,  choices=['covid'])
     parser.add_argument('--round',       required=True,  type=int)
     parser.add_argument('--clip',        default=1.0,    type=float)
     parser.add_argument('--noise',       default=0.1,    type=float)
@@ -500,6 +477,14 @@ def main():
     print("\n[1/6] Loading model…")
     if base_model is not None:
         model = base_model
+    elif args.round > 1:
+        # Rounds 2+: train from previous global model so deltas are consistent
+        try:
+            pulled = pull_global_model(args.model, args.server)
+            model = pulled if pulled is not None else load_pretrained(args.model)
+        except Exception as exc:
+            print(f"  Warning — could not pull global model ({exc}), using pretrained.")
+            model = load_pretrained(args.model)
     else:
         model = load_pretrained(args.model)
 

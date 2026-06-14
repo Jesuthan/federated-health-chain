@@ -40,6 +40,15 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
+try:
+    from torchvision import transforms
+    from torchvision.datasets import ImageFolder
+    TORCHVISION_OK = True
+except ImportError:
+    TORCHVISION_OK = False
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
+
 MODELS_DIR     = os.path.join(os.path.dirname(__file__), '..', 'models')
 DEFAULT_SERVER = os.environ.get('FL_SERVER_URL', 'http://localhost:3000')
 IPFS_ADDR      = os.environ.get('IPFS_ADDR', '/ip4/127.0.0.1/tcp/5001')
@@ -64,26 +73,8 @@ class CovidCNN(nn.Module):
         return self.fc2(torch.relu(self.fc1(x)))
 
 
-class SkinCNN(nn.Module):
-    """2-block CNN for HAM10000 skin lesion classification (7 classes)."""
-    def __init__(self, num_classes=7):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, padding=1)
-        self.pool  = nn.MaxPool2d(2)
-        self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
-        self.fc1   = nn.Linear(64 * 56 * 56, 128)
-        self.fc2   = nn.Linear(128, num_classes)
-
-    def forward(self, x):
-        import torch.nn.functional as F
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(x.size(0), -1)
-        return self.fc2(F.relu(self.fc1(x)))
-
-
-MODEL_CLASS = {'covid': CovidCNN, 'skin': SkinCNN}
-NUM_CLASSES = {'covid': 3,        'skin': 7}
+MODEL_CLASS = {'covid': CovidCNN}
+NUM_CLASSES = {'covid': 3}
 
 # ─── Synthetic Test Data (mirrors fl_client.py generate_test_data) ─────────────
 
@@ -101,7 +92,8 @@ def generate_test_data(model_type: str, n_samples: int = 60) -> TensorDataset:
     labels = torch.tensor(labels_list, dtype=torch.long)
     n      = len(labels)
 
-    images = torch.randn(n, 1, 224, 224) * 0.15
+    img_size = 224
+    images = torch.randn(n, 1, img_size, img_size) * 0.15
     for c in range(num_classes):
         mask = labels == c
         if mask.sum() == 0:
@@ -109,7 +101,7 @@ def generate_test_data(model_type: str, n_samples: int = 60) -> TensorDataset:
         brightness = (c / (num_classes - 1)) * 1.2 - 0.6
         images[mask] += brightness
         quad = c % 4
-        h, w = 224, 224
+        h, w = img_size, img_size
         mid_h, mid_w = h // 2, w // 2
         regions = [
             (slice(0, mid_h), slice(0, mid_w)),
@@ -125,15 +117,33 @@ def generate_test_data(model_type: str, n_samples: int = 60) -> TensorDataset:
 
 # ─── Real Accuracy Evaluation ──────────────────────────────────────────────────
 
+def _load_real_test_loader(model_type: str, batch_size: int = 16):
+    """Load real test images from data/test/{model_type}/ if available."""
+    test_dir = os.path.abspath(os.path.join(DATA_DIR, 'test', model_type))
+    if not TORCHVISION_OK or not os.path.isdir(test_dir):
+        return None
+    size = 224
+    tf = transforms.Compose([
+        transforms.Resize((size, size)),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5], [0.5]),
+    ])
+    try:
+        dataset = ImageFolder(test_dir, transform=tf)
+        if len(dataset) == 0:
+            return None
+        print(f"  Real test set: {len(dataset)} images, classes={dataset.classes}")
+        return DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    except Exception as exc:
+        print(f"  Warning — could not load real test data: {exc}")
+        return None
+
+
 def evaluate_global_model(state_dict: dict, model_type: str, n_test: int = 60) -> float:
     """
-    Run a real forward pass on a synthetic balanced test set.
-
-    Uses the same image generation as the clients (brightness + spatial quadrant
-    per class) so the model's learned representations transfer directly.
-    Fixed seed=999 ensures identical test set across every FL round so accuracy
-    numbers are strictly comparable round-over-round.
-
+    Evaluate aggregated global model.
+    Priority: real test images from data/test/{model_type}/ → synthetic fallback.
     Returns accuracy in [0, 1].
     """
     model = MODEL_CLASS[model_type]()
@@ -142,6 +152,22 @@ def evaluate_global_model(state_dict: dict, model_type: str, n_test: int = 60) -
         print(f"  Note: {len(missing)} key(s) not in state_dict — using random init for those")
     model.eval()
 
+    real_loader = _load_real_test_loader(model_type)
+
+    if real_loader:
+        print("  Evaluating on REAL test images…")
+        correct = total = 0
+        with torch.no_grad():
+            for x, y in real_loader:
+                _, pred = model(x).max(1)
+                total   += y.size(0)
+                correct += pred.eq(y).sum().item()
+        accuracy = correct / total if total > 0 else 0.0
+        print(f"  Real test accuracy: {accuracy*100:.2f}%  ({correct}/{total})")
+        return round(accuracy, 4)
+
+    # Fallback: synthetic test set
+    print("  No real test data found — using synthetic test set.")
     test_data  = generate_test_data(model_type, n_test)
     loader     = DataLoader(test_data, batch_size=16, shuffle=False)
     correct    = total = 0
@@ -154,7 +180,6 @@ def evaluate_global_model(state_dict: dict, model_type: str, n_test: int = 60) -
 
     accuracy = correct / total if total > 0 else 0.0
 
-    # Per-class breakdown
     num_classes  = NUM_CLASSES[model_type]
     all_x, all_y = test_data.tensors
     per_class_acc = []
@@ -323,7 +348,7 @@ def load_base_model(model_type: str, round_num: int, server_url: str) -> dict:
     if not os.path.exists(base_path):
         raise FileNotFoundError(
             f"Base model not found: {base_path}\n"
-            "Place pretrained weights in models/ folder."
+            "Run:  python models/inspect_hf_models.py"
         )
     print(f"  Using HF pretrained base: {base_path}")
     return torch.load(base_path, map_location='cpu', weights_only=False)
@@ -333,7 +358,7 @@ def load_base_model(model_type: str, round_num: int, server_url: str) -> dict:
 def main():
     parser = argparse.ArgumentParser(description='FedProx/FedAvg Aggregator')
     parser.add_argument('--round',  required=True, type=int)
-    parser.add_argument('--model',  required=True, choices=['covid', 'skin'])
+    parser.add_argument('--model',  required=True, choices=['covid'])
     parser.add_argument('--server', default=DEFAULT_SERVER)
     parser.add_argument('--algo',   default='fedprox', choices=['fedprox', 'fedavg'],
                         help='Algorithm label for metrics (default: fedprox)')
