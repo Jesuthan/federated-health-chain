@@ -6,19 +6,11 @@ Pipeline:
   [0] (optional) Pull latest global model from blockchain → IPFS
   [1] Load pretrained model weights
   [2] Real local training — FedProx (default) or FedAvg
-      Uses real PyTorch gradient descent on synthetic non-IID hospital data.
-      Replace generate_hospital_data() with your real DataLoader when available.
+      Uses real PyTorch gradient descent on hospital image data.
   [3] Compute weight delta  (updated - original)
   [4] Apply differential privacy  (global L2 clip + Gaussian noise)
   [5] Upload delta to IPFS → CID
   [6] POST CID to REST server → stored on Fabric blockchain
-
-Non-IID data simulation
------------------------
-Each hospital has a skewed class distribution (dominant class per hospital ID).
-This reproduces the real-world scenario where Hospital A has mostly COVID-positive
-patients, Hospital B has mostly healthy patients, etc.  FedProx's proximal term
-prevents local models from over-fitting to their dominant class.
 
 Algorithm
 ---------
@@ -36,7 +28,7 @@ import tempfile
 import requests
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 try:
     from torchvision import transforms
     from torchvision.datasets import ImageFolder
@@ -73,105 +65,6 @@ NUM_CLASSES    = {'covid': 3}
 CLASS_NAMES    = {
     'covid': ['COVID-19', 'Normal', 'Viral Pneumonia'],
 }
-
-
-# ─── Synthetic Data Generation ─────────────────────────────────────────────────
-
-def generate_hospital_data(model_type: str, n_samples: int, hospital_id: int) -> TensorDataset:
-    """
-    Generate synthetic non-IID hospital data.
-
-    Each hospital has a DOMINANT CLASS reflecting real-world data heterogeneity:
-      Hospital 1 → mostly COVID-positive  (class 0 = 70%)
-      Hospital 2 → mostly Normal          (class 1 = 70%)
-      Hospital 3 → mostly Viral Pneumonia (class 2 = 70%)  etc.
-
-    Class-specific image patterns (brightness + spatial region) give the model
-    real signal to learn from, so gradient descent produces meaningful updates.
-
-    Replace this function with a real torch DataLoader on your hospital dataset.
-    The FL pipeline (delta, DP, IPFS, blockchain) is identical for real data.
-    """
-    torch.manual_seed(hospital_id * 42)
-    num_classes    = NUM_CLASSES[model_type]
-    dominant_class = (hospital_id - 1) % num_classes
-
-    # Build non-IID label distribution: 70% dominant, rest shared equally
-    minority_frac = 0.30 / max(num_classes - 1, 1)
-    counts = []
-    for c in range(num_classes):
-        frac = 0.70 if c == dominant_class else minority_frac
-        counts.append(max(1, int(n_samples * frac)))
-    # Trim / pad to exactly n_samples
-    while sum(counts) > n_samples:
-        counts[dominant_class] -= 1
-    while sum(counts) < n_samples:
-        counts[dominant_class] += 1
-
-    labels_list = []
-    for c, cnt in enumerate(counts):
-        labels_list.extend([c] * cnt)
-    labels = torch.tensor(labels_list, dtype=torch.long)
-
-    img_size = 224
-    images = torch.randn(n_samples, 1, img_size, img_size) * 0.15
-
-    for c in range(num_classes):
-        mask = labels == c
-        if mask.sum() == 0:
-            continue
-        brightness = (c / (num_classes - 1)) * 1.2 - 0.6
-        images[mask] += brightness
-        quad = c % 4
-        h, w = img_size, img_size
-        mid_h, mid_w = h // 2, w // 2
-        regions = [
-            (slice(0, mid_h),   slice(0, mid_w)),    # top-left
-            (slice(0, mid_h),   slice(mid_w, w)),     # top-right
-            (slice(mid_h, h),   slice(0, mid_w)),     # bottom-left
-            (slice(mid_h, h),   slice(mid_w, w)),     # bottom-right
-        ]
-        r = regions[quad]
-        images[mask, :, r[0], r[1]] += 0.4
-
-    return TensorDataset(images, labels)
-
-
-def generate_test_data(model_type: str, n_samples: int = 40) -> TensorDataset:
-    """
-    Balanced test set (equal class distribution) for accuracy evaluation.
-    Uses a fixed seed (seed=999) for reproducibility across rounds.
-    """
-    torch.manual_seed(999)
-    num_classes  = NUM_CLASSES[model_type]
-    per_class    = max(1, n_samples // num_classes)
-    labels_list  = []
-    for c in range(num_classes):
-        labels_list.extend([c] * per_class)
-    labels = torch.tensor(labels_list, dtype=torch.long)
-    n      = len(labels)
-
-    img_size = 224
-    images = torch.randn(n, 1, img_size, img_size) * 0.15
-    for c in range(num_classes):
-        mask = labels == c
-        if mask.sum() == 0:
-            continue
-        brightness = (c / (num_classes - 1)) * 1.2 - 0.6
-        images[mask] += brightness
-        quad = c % 4
-        h, w = img_size, img_size
-        mid_h, mid_w = h // 2, w // 2
-        regions = [
-            (slice(0, mid_h),   slice(0, mid_w)),
-            (slice(0, mid_h),   slice(mid_w, w)),
-            (slice(mid_h, h),   slice(0, mid_w)),
-            (slice(mid_h, h),   slice(mid_w, w)),
-        ]
-        r = regions[quad]
-        images[mask, :, r[0], r[1]] += 0.4
-
-    return TensorDataset(images, labels)
 
 
 # ─── Real Data Loaders ────────────────────────────────────────────────────────
@@ -494,17 +387,13 @@ def main():
     print(f"\n[2/6] Loading training data for {args.sender}…")
     real_loader, real_n = load_hospital_data(args.model, hospital_id, batch_size=min(8, args.samples))
 
-    if real_loader is not None:
-        dataloader = real_loader
-        print(f"  Using REAL data  ({real_n} samples)")
-    else:
-        print(f"  Real data not found — using synthetic non-IID data")
-        dataset    = generate_hospital_data(args.model, args.samples, hospital_id)
-        dataloader = DataLoader(dataset, batch_size=min(8, args.samples), shuffle=True)
-        labels     = dataset.tensors[1]
-        class_names = CLASS_NAMES[args.model]
-        dist = {class_names[c]: int((labels == c).sum()) for c in range(NUM_CLASSES[args.model])}
-        print(f"  Class distribution (non-IID): {dist}")
+    if real_loader is None:
+        raise FileNotFoundError(
+            f"No training data found for hospital_{hospital_id}/{args.model}. "
+            f"Expected: data/hospital_{hospital_id}/{args.model}/<class>/<images>"
+        )
+    dataloader = real_loader
+    print(f"  Using REAL data  ({real_n} samples)")
 
     print(f"\n  Training with {args.algo.upper()}…")
     if args.algo == 'fedprox':

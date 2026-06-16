@@ -8,9 +8,9 @@ Pipeline:
   [1] Query blockchain for all updates in this round + model type
   [2] Download each client delta from IPFS
   [3] Weighted aggregation  (FedProx-aware weighted FedAvg)
-  [4] Load base model  (previous global round OR HF pretrained weights)
+  [4] Load base model  (previous global round )
   [5] Apply averaged delta → new global model weights
-  [6] Real accuracy evaluation on synthetic balanced test set
+  [6] Real accuracy evaluation on balanced test set
   [7] Upload global model to IPFS → CID
   [8] Record global model CID on blockchain
   [9] POST accuracy + privacy metrics to REST server
@@ -38,7 +38,7 @@ import ipfshttpclient
 import requests
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
 try:
     from torchvision import transforms
@@ -75,45 +75,6 @@ class CovidCNN(nn.Module):
 
 MODEL_CLASS = {'covid': CovidCNN}
 NUM_CLASSES = {'covid': 3}
-
-# ─── Synthetic Test Data (mirrors fl_client.py generate_test_data) ─────────────
-
-def generate_test_data(model_type: str, n_samples: int = 60) -> TensorDataset:
-    """
-    Balanced synthetic test set — same generation logic as fl_client.py.
-    Fixed seed=999 ensures the same test set every round for fair comparison.
-    """
-    torch.manual_seed(999)
-    num_classes = NUM_CLASSES[model_type]
-    per_class   = max(1, n_samples // num_classes)
-    labels_list = []
-    for c in range(num_classes):
-        labels_list.extend([c] * per_class)
-    labels = torch.tensor(labels_list, dtype=torch.long)
-    n      = len(labels)
-
-    img_size = 224
-    images = torch.randn(n, 1, img_size, img_size) * 0.15
-    for c in range(num_classes):
-        mask = labels == c
-        if mask.sum() == 0:
-            continue
-        brightness = (c / (num_classes - 1)) * 1.2 - 0.6
-        images[mask] += brightness
-        quad = c % 4
-        h, w = img_size, img_size
-        mid_h, mid_w = h // 2, w // 2
-        regions = [
-            (slice(0, mid_h), slice(0, mid_w)),
-            (slice(0, mid_h), slice(mid_w, w)),
-            (slice(mid_h, h), slice(0, mid_w)),
-            (slice(mid_h, h), slice(mid_w, w)),
-        ]
-        r = regions[quad]
-        images[mask, :, r[0], r[1]] += 0.4
-
-    return TensorDataset(images, labels)
-
 
 # ─── Real Accuracy Evaluation ──────────────────────────────────────────────────
 
@@ -154,45 +115,20 @@ def evaluate_global_model(state_dict: dict, model_type: str, n_test: int = 60) -
 
     real_loader = _load_real_test_loader(model_type)
 
-    if real_loader:
-        print("  Evaluating on REAL test images…")
-        correct = total = 0
-        with torch.no_grad():
-            for x, y in real_loader:
-                _, pred = model(x).max(1)
-                total   += y.size(0)
-                correct += pred.eq(y).sum().item()
-        accuracy = correct / total if total > 0 else 0.0
-        print(f"  Real test accuracy: {accuracy*100:.2f}%  ({correct}/{total})")
-        return round(accuracy, 4)
-
-    # Fallback: synthetic test set
-    print("  No real test data found — using synthetic test set.")
-    test_data  = generate_test_data(model_type, n_test)
-    loader     = DataLoader(test_data, batch_size=16, shuffle=False)
-    correct    = total = 0
-
+    if not real_loader:
+        raise FileNotFoundError(
+            f"No real test data found at data/test/{model_type}/. "
+            "Expected sub-folders per class (ImageFolder layout)."
+        )
+    print("  Evaluating on REAL test images…")
+    correct = total = 0
     with torch.no_grad():
-        for x, y in loader:
+        for x, y in real_loader:
             _, pred = model(x).max(1)
             total   += y.size(0)
             correct += pred.eq(y).sum().item()
-
     accuracy = correct / total if total > 0 else 0.0
-
-    num_classes  = NUM_CLASSES[model_type]
-    all_x, all_y = test_data.tensors
-    per_class_acc = []
-    with torch.no_grad():
-        logits = model(all_x)
-        preds  = logits.argmax(dim=1)
-    for c in range(num_classes):
-        mask = all_y == c
-        if mask.sum() > 0:
-            cls_acc = preds[mask].eq(all_y[mask]).float().mean().item()
-            per_class_acc.append(f"class{c}={cls_acc*100:.0f}%")
-    print(f"  Per-class accuracy: {' | '.join(per_class_acc)}")
-
+    print(f"  Real test accuracy: {accuracy*100:.2f}%  ({correct}/{total})")
     return round(accuracy, 4)
 
 
@@ -421,7 +357,7 @@ def main():
     print(f"  Global model assembled  ({len(global_weights)} tensors)")
 
     # [6] Real accuracy evaluation
-    print(f"\n[6/9] Evaluating global model on synthetic test set…")
+    print(f"\n[6/9] Evaluating global model on real test set…")
     accuracy = evaluate_global_model(global_weights, args.model)
     print(f"  Accuracy: {accuracy*100:.2f}%  ({args.algo.upper()}"
           + (f"  mu={args.mu}" if args.algo == 'fedprox' else "") + ")")
