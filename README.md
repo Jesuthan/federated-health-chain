@@ -1,4 +1,6 @@
-# BFL Healthcare — Blockchain Federated Learning
+# BFL Healthcare - Blockchain Federated Learning
+
+[![CI](https://github.com/Jesuthan/federated-health-chain/actions/workflows/ci.yml/badge.svg)](https://github.com/Jesuthan/federated-health-chain/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/) [![Hyperledger Fabric](https://img.shields.io/badge/Hyperledger%20Fabric-2.5-2F3134?logo=hyperledger&logoColor=white)](https://hyperledger-fabric.readthedocs.io/)
 
 A research system combining **Federated Learning**, **Hyperledger Fabric blockchain**, and **IPFS** for privacy-preserving collaborative AI training across hospitals — without sharing raw patient data.
 

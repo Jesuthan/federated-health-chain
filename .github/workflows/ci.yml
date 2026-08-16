@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    name: Python syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile Python sources
+        run: python -m compileall -q client server
+
+  node:
+    name: Node syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check JavaScript sources parse
+        run: |
+          node --check launcher.js
+          node --check server/server.js
+          node --check server/enrollAdmin.js
+          node --check server/registerUser.js
+          node --check chaincode/modelregistry/index.js
